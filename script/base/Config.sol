@@ -9,10 +9,10 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 contract Config {
     /// @dev ETH is represented as address(0) for native token
     /// @dev stETH will be deployed and its address will be set during script execution
-    IERC20 constant token0 = IERC20(address(0)); // ETH (native token)
-    IERC20 constant token1 = IERC20(address(0xa513E6E4b8f2a923D98304ec87F64353C4D5C853)); // stETH (to be deployed)
-    IHooks constant hookContract = IHooks(address(0x0));
+    IERC20 constant TOKEN0 = IERC20(address(0)); // ETH (native token)
+    IERC20 constant TOKEN1 = IERC20(address(0xa513E6E4b8f2a923D98304ec87F64353C4D5C853)); // stETH (to be deployed)
+    IHooks constant HOOK_CONTRACT = IHooks(address(0x0));
 
-    Currency constant currency0 = Currency.wrap(address(token0)); // ETH
-    Currency constant currency1 = Currency.wrap(address(token1)); // stETH
+    Currency constant CURRENCY0 = Currency.wrap(address(TOKEN0)); // ETH
+    Currency constant CURRENCY1 = Currency.wrap(address(TOKEN1)); // stETH
 }

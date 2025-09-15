@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
@@ -30,7 +31,7 @@ contract SustainableIncentivesTest is Test, Fixtures {
         bytes memory constructorArgs = abi.encode(manager, treasury);
         deployCodeTo("ParityPool.sol:ParityPool", constructorArgs, flags);
         hook = ParityPool(flags);
-        lpToken = hook.lpToken();
+        lpToken = hook.LP_TOKEN();
         protocolRevenue = ProtocolRevenue(hook.getProtocolRevenue());
 
         key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Script.sol";
+import {Script} from "forge-std/Script.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
@@ -37,13 +37,12 @@ contract CreatePoolOnly is Script, Constants, Config {
 
     function run() external {
         PoolKey memory pool = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
+            currency0: CURRENCY0,
+            currency1: CURRENCY1,
             fee: lpFee,
             tickSpacing: tickSpacing,
-            hooks: hookContract
+            hooks: HOOK_CONTRACT
         });
-        bytes memory hookData = new bytes(0);
 
         vm.broadcast();
         IPoolManager(POOLMANAGER).initialize(pool, startingPrice);

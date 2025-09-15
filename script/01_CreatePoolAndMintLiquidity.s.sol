@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Script.sol";
-import {PositionManager} from "v4-periphery/src/PositionManager.sol";
+import {Script} from "forge-std/Script.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
 import {Actions} from "v4-periphery/src/libraries/Actions.sol";
 import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {IERC20} from "forge-std/interfaces/IERC20.sol";
 
 import {Constants} from "./base/Constants.sol";
 import {Config} from "./base/Config.sol";
@@ -40,11 +38,11 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
     function run() external {
         // tokens should be sorted
         PoolKey memory pool = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
+            currency0: CURRENCY0,
+            currency1: CURRENCY1,
             fee: lpFee,
             tickSpacing: tickSpacing,
-            hooks: hookContract
+            hooks: HOOK_CONTRACT
         });
         bytes memory hookData = new bytes(0);
 
@@ -70,15 +68,15 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
         bytes[] memory params = new bytes[](2);
 
         // initialize pool
-        params[0] = abi.encodeWithSelector(posm.initializePool.selector, pool, startingPrice, hookData);
+        params[0] = abi.encodeWithSelector(POSM.initializePool.selector, pool, startingPrice, hookData);
 
         // mint liquidity
         params[1] = abi.encodeWithSelector(
-            posm.modifyLiquidities.selector, abi.encode(actions, mintParams), block.timestamp + 60
+            POSM.modifyLiquidities.selector, abi.encode(actions, mintParams), block.timestamp + 60
         );
 
         // if the pool is an ETH pair, native tokens are to be transferred
-        uint256 valueToPass = currency0.isAddressZero() ? amount0Max : 0;
+        uint256 valueToPass = CURRENCY0.isAddressZero() ? amount0Max : 0;
 
         vm.startBroadcast();
         tokenApprovals();
@@ -86,7 +84,7 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
 
         // multicall to atomically create pool & add liquidity
         vm.broadcast();
-        posm.multicall{value: valueToPass}(params);
+        POSM.multicall{value: valueToPass}(params);
     }
 
     /// @dev helper function for encoding mint liquidity operation
@@ -110,13 +108,13 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
     }
 
     function tokenApprovals() public {
-        if (!currency0.isAddressZero()) {
-            token0.approve(address(PERMIT2), type(uint256).max);
-            PERMIT2.approve(address(token0), address(posm), type(uint160).max, type(uint48).max);
+        if (!CURRENCY0.isAddressZero()) {
+            TOKEN0.approve(address(PERMIT2), type(uint256).max);
+            PERMIT2.approve(address(TOKEN0), address(POSM), type(uint160).max, type(uint48).max);
         }
-        if (!currency1.isAddressZero()) {
-            token1.approve(address(PERMIT2), type(uint256).max);
-            PERMIT2.approve(address(token1), address(posm), type(uint160).max, type(uint48).max);
+        if (!CURRENCY1.isAddressZero()) {
+            TOKEN1.approve(address(PERMIT2), type(uint256).max);
+            PERMIT2.approve(address(TOKEN1), address(POSM), type(uint160).max, type(uint48).max);
         }
     }
 }

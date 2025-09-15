@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Script.sol";
+import {Script} from "forge-std/Script.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
 
 import {Constants} from "./base/Constants.sol";
 import {Config} from "./base/Config.sol";
@@ -30,18 +29,18 @@ contract SwapScript is Script, Constants, Config {
 
     function run() external {
         PoolKey memory pool = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
+            currency0: CURRENCY0,
+            currency1: CURRENCY1,
             fee: lpFee,
             tickSpacing: tickSpacing,
-            hooks: hookContract
+            hooks: HOOK_CONTRACT
         });
 
         // approve tokens to the swap router
         vm.broadcast();
-        token0.approve(address(swapRouter), type(uint256).max);
+        TOKEN0.approve(address(swapRouter), type(uint256).max);
         vm.broadcast();
-        token1.approve(address(swapRouter), type(uint256).max);
+        TOKEN1.approve(address(swapRouter), type(uint256).max);
 
         // ------------------------------ //
         // Swap 100e18 token0 into token1 //

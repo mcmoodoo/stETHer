@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Script.sol";
-import "forge-std/console.sol";
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
@@ -40,11 +40,11 @@ contract AddLiquidityScript is Script, Constants, Config {
 
     function run() external {
         PoolKey memory pool = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
+            currency0: CURRENCY0,
+            currency1: CURRENCY1,
             fee: lpFee,
             tickSpacing: tickSpacing,
-            hooks: hookContract
+            hooks: HOOK_CONTRACT
         });
 
         (uint160 sqrtPriceX96,,,) = POOLMANAGER.getSlot0(pool.toId());
@@ -69,20 +69,20 @@ contract AddLiquidityScript is Script, Constants, Config {
         vm.stopBroadcast();
 
         vm.startBroadcast();
-        IPositionManager(address(posm)).mint(
+        IPositionManager(address(POSM)).mint(
             pool, tickLower, tickUpper, liquidity, amount0Max, amount1Max, msg.sender, block.timestamp + 60, hookData
         );
         vm.stopBroadcast();
     }
 
     function tokenApprovals() public {
-        if (!currency0.isAddressZero()) {
-            token0.approve(address(PERMIT2), type(uint256).max);
-            PERMIT2.approve(address(token0), address(posm), type(uint160).max, type(uint48).max);
+        if (!CURRENCY0.isAddressZero()) {
+            TOKEN0.approve(address(PERMIT2), type(uint256).max);
+            PERMIT2.approve(address(TOKEN0), address(POSM), type(uint160).max, type(uint48).max);
         }
-        if (!currency1.isAddressZero()) {
-            token1.approve(address(PERMIT2), type(uint256).max);
-            PERMIT2.approve(address(token1), address(posm), type(uint160).max, type(uint48).max);
+        if (!CURRENCY1.isAddressZero()) {
+            TOKEN1.approve(address(PERMIT2), type(uint256).max);
+            PERMIT2.approve(address(TOKEN1), address(POSM), type(uint160).max, type(uint48).max);
         }
     }
 }

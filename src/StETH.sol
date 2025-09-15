@@ -5,10 +5,23 @@ pragma solidity ^0.8.24;
 /// @notice A rebasing implementation of stETH with automatic yield generation at 5% APY
 /// @dev Uses shares-based accounting to handle rebasing while maintaining ERC20 compatibility
 contract StETH {
-    string public constant name = "Staked Ether";
-    string public constant symbol = "stETH";
-    uint8 public constant decimals = 18;
-    
+    string public constant NAME = "Staked Ether";
+    string public constant SYMBOL = "stETH";
+    uint8 public constant DECIMALS = 18;
+
+    // ERC20 compatibility functions
+    function name() public pure returns (string memory) {
+        return NAME;
+    }
+
+    function symbol() public pure returns (string memory) {
+        return SYMBOL;
+    }
+
+    function decimals() public pure returns (uint8) {
+        return DECIMALS;
+    }
+
     uint256 public totalSupply;
     mapping(address => mapping(address => uint256)) public allowance;
     uint256 public lastRebaseTime;

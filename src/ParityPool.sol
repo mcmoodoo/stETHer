@@ -4,13 +4,11 @@ pragma solidity ^0.8.24;
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {BaseHook} from "./forks/BaseHook.sol";
 import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
-import {ImmutableState} from "v4-periphery/src/base/ImmutableState.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
-import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {SafeCast} from "v4-core/src/libraries/SafeCast.sol";
@@ -23,10 +21,10 @@ contract ParityPool is BaseHook, SafeCallback {
     using CurrencyLibrary for Currency;
 
     /// @notice LP token for this pool
-    ParityLP public immutable lpToken;
+    ParityLP public immutable LP_TOKEN;
     
     /// @notice Protocol revenue management
-    ProtocolRevenue public immutable protocolRevenue;
+    ProtocolRevenue public immutable PROTOCOL_REVENUE;
     
     /// @notice Track total liquidity in the pool (sum of both tokens)
     uint256 public totalLiquidity;
@@ -36,16 +34,16 @@ contract ParityPool is BaseHook, SafeCallback {
     uint256 public accumulatedFees1; // stETH fees
     
     /// @notice Track fees claimed per LP token to prevent double claiming
-    uint256 public feesPerLPToken0; // ETH fees per LP token (scaled by 1e18)
-    uint256 public feesPerLPToken1; // stETH fees per LP token (scaled by 1e18)
+    uint256 public feesPerLpToken0; // ETH fees per LP token (scaled by 1e18)
+    uint256 public feesPerLpToken1; // stETH fees per LP token (scaled by 1e18)
     
     /// @notice Track what each user has already claimed
-    mapping(address => uint256) public claimedFeesPerLPToken0;
-    mapping(address => uint256) public claimedFeesPerLPToken1;
+    mapping(address => uint256) public claimedFeesPerLpToken0;
+    mapping(address => uint256) public claimedFeesPerLpToken1;
 
     constructor(IPoolManager poolManager_, address treasury) SafeCallback(poolManager_) {
-        lpToken = new ParityLP(address(this));
-        protocolRevenue = new ProtocolRevenue(treasury);
+        LP_TOKEN = new ParityLP(address(this));
+        PROTOCOL_REVENUE = new ProtocolRevenue(treasury);
     }
 
     function _poolManager() internal view override returns (IPoolManager) {
@@ -182,7 +180,7 @@ contract ParityPool is BaseHook, SafeCallback {
         uint256 maxIncentive = (inputAmount * maxIncentiveRate) / 1_000_000;
         
         // Check available protocol fees for incentives
-        uint256 availableProtocolFees = protocolRevenue.getProtocolFees(Currency.unwrap(key.currency1));
+        uint256 availableProtocolFees = PROTOCOL_REVENUE.getProtocolFees(Currency.unwrap(key.currency1));
         
         // Use the minimum of max incentive and available protocol fees
         incentiveAmount = maxIncentive > availableProtocolFees ? availableProtocolFees : maxIncentive;
@@ -223,7 +221,7 @@ contract ParityPool is BaseHook, SafeCallback {
         
         // Deduct incentive from protocol fees
         address stethToken = Currency.unwrap(key.currency1);
-        bool success = protocolRevenue.spendProtocolFeesForIncentive(stethToken, incentiveAmount);
+        bool success = PROTOCOL_REVENUE.spendProtocolFeesForIncentive(stethToken, incentiveAmount);
         
         if (!success) {
             // If protocol fees are insufficient, this should not happen due to pre-calculation
@@ -264,7 +262,7 @@ contract ParityPool is BaseHook, SafeCallback {
     /// @return amount0 Amount of currency0 returned
     /// @return amount1 Amount of currency1 returned
     function removeLiquidity(PoolKey calldata key, uint256 lpTokenAmount) external returns (uint256 amount0, uint256 amount1) {
-        require(lpToken.balanceOf(msg.sender) >= lpTokenAmount, "Insufficient LP tokens");
+        require(LP_TOKEN.balanceOf(msg.sender) >= lpTokenAmount, "Insufficient LP tokens");
         
         bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, lpTokenAmount, false));
         uint256 packedAmounts = abi.decode(result, (uint256));
@@ -309,7 +307,7 @@ contract ParityPool is BaseHook, SafeCallback {
             poolManager.settle{value: amountPerToken}();
         } else {
             poolManager.sync(currency0);
-            IERC20(Currency.unwrap(currency0)).transferFrom(payer, address(poolManager), amountPerToken);
+            require(IERC20(Currency.unwrap(currency0)).transferFrom(payer, address(poolManager), amountPerToken), "TransferFrom failed");
             poolManager.settle();
         }
 
@@ -318,7 +316,7 @@ contract ParityPool is BaseHook, SafeCallback {
             poolManager.settle{value: amountPerToken}();
         } else {
             poolManager.sync(currency1);
-            IERC20(Currency.unwrap(currency1)).transferFrom(payer, address(poolManager), amountPerToken);
+            require(IERC20(Currency.unwrap(currency1)).transferFrom(payer, address(poolManager), amountPerToken), "TransferFrom failed");
             poolManager.settle();
         }
 
@@ -334,14 +332,14 @@ contract ParityPool is BaseHook, SafeCallback {
         } else {
             // Subsequent LPs get proportional share
             // lpTokens = (amountAdded / totalLiquidity) * lpToken.totalSupply()
-            lpTokensToMint = (amountPerToken * 2 * lpToken.totalSupply()) / totalLiquidity;
+            lpTokensToMint = (amountPerToken * 2 * LP_TOKEN.totalSupply()) / totalLiquidity;
         }
 
         // Update total liquidity
         totalLiquidity += amountPerToken * 2;
 
         // Mint LP tokens to user
-        lpToken.mint(payer, lpTokensToMint);
+        LP_TOKEN.mint(payer, lpTokensToMint);
 
         return abi.encode(lpTokensToMint);
     }
@@ -350,23 +348,23 @@ contract ParityPool is BaseHook, SafeCallback {
         internal returns (bytes memory) {
         
         // Calculate what to remove BEFORE burning tokens (to avoid division by zero)
-        uint256 totalLPSupply = lpToken.totalSupply();
-        uint256 liquidityToRemove = (lpTokenAmount * totalLiquidity) / totalLPSupply;
+        uint256 totalLpSupply = LP_TOKEN.totalSupply();
+        uint256 liquidityToRemove = (lpTokenAmount * totalLiquidity) / totalLpSupply;
         
         // Calculate proportional share of base liquidity
         uint256 amount0 = liquidityToRemove / 2;
         uint256 amount1 = liquidityToRemove / 2;
 
         // Add accumulated fees to withdrawal
-        uint256 fees0 = (lpTokenAmount * (feesPerLPToken0 - claimedFeesPerLPToken0[user])) / 1e18;
-        uint256 fees1 = (lpTokenAmount * (feesPerLPToken1 - claimedFeesPerLPToken1[user])) / 1e18;
+        uint256 fees0 = (lpTokenAmount * (feesPerLpToken0 - claimedFeesPerLpToken0[user])) / 1e18;
+        uint256 fees1 = (lpTokenAmount * (feesPerLpToken1 - claimedFeesPerLpToken1[user])) / 1e18;
         
         amount0 += fees0;
         amount1 += fees1;
         
         // Update claimed fees tracking for this user
-        claimedFeesPerLPToken0[user] = feesPerLPToken0;
-        claimedFeesPerLPToken1[user] = feesPerLPToken1;
+        claimedFeesPerLpToken0[user] = feesPerLpToken0;
+        claimedFeesPerLpToken1[user] = feesPerLpToken1;
         
         // Deduct claimed fees from accumulated totals
         accumulatedFees0 -= fees0;
@@ -383,7 +381,7 @@ contract ParityPool is BaseHook, SafeCallback {
         totalLiquidity -= liquidityToRemove;
 
         // Burn LP tokens
-        lpToken.burn(user, lpTokenAmount);
+        LP_TOKEN.burn(user, lpTokenAmount);
 
         // Burn ERC6909 tokens from hook
         poolManager.burn(address(this), currency0.toId(), amount0);
@@ -399,30 +397,30 @@ contract ParityPool is BaseHook, SafeCallback {
     /// @notice Split fees between protocol and LPs, then accumulate LP portion
     function _splitAndAccumulateFees(PoolKey calldata key, uint256 feeAmount0, uint256 feeAmount1, uint256 swapAmount) internal {
         // Calculate protocol fees using the ProtocolRevenue contract
-        (uint256 protocolFee0, uint256 lpFee0) = protocolRevenue.calculateProtocolFee(feeAmount0, swapAmount);
-        (uint256 protocolFee1, uint256 lpFee1) = protocolRevenue.calculateProtocolFee(feeAmount1, swapAmount);
+        (uint256 protocolFee0, uint256 lpFee0) = PROTOCOL_REVENUE.calculateProtocolFee(feeAmount0, swapAmount);
+        (uint256 protocolFee1, uint256 lpFee1) = PROTOCOL_REVENUE.calculateProtocolFee(feeAmount1, swapAmount);
         
         // Accumulate protocol fees
         if (protocolFee0 > 0) {
-            protocolRevenue.accumulateProtocolFee(Currency.unwrap(key.currency0), protocolFee0);
+            PROTOCOL_REVENUE.accumulateProtocolFee(Currency.unwrap(key.currency0), protocolFee0);
         }
         if (protocolFee1 > 0) {
-            protocolRevenue.accumulateProtocolFee(Currency.unwrap(key.currency1), protocolFee1);
+            PROTOCOL_REVENUE.accumulateProtocolFee(Currency.unwrap(key.currency1), protocolFee1);
         }
         
         // Accumulate LP fees
-        _accumulateLPFees(lpFee0, lpFee1);
+        _accumulateLpFees(lpFee0, lpFee1);
     }
 
     /// @notice Accumulate fees for LP distribution
-    function _accumulateLPFees(uint256 feeAmount0, uint256 feeAmount1) internal {
+    function _accumulateLpFees(uint256 feeAmount0, uint256 feeAmount1) internal {
         if (feeAmount0 > 0) {
             accumulatedFees0 += feeAmount0;
             
             // Update fees per LP token if there are LP tokens outstanding
-            uint256 totalSupply = lpToken.totalSupply();
+            uint256 totalSupply = LP_TOKEN.totalSupply();
             if (totalSupply > 0) {
-                feesPerLPToken0 += (feeAmount0 * 1e18) / totalSupply;
+                feesPerLpToken0 += (feeAmount0 * 1e18) / totalSupply;
             }
         }
         
@@ -430,30 +428,30 @@ contract ParityPool is BaseHook, SafeCallback {
             accumulatedFees1 += feeAmount1;
             
             // Update fees per LP token if there are LP tokens outstanding
-            uint256 totalSupply = lpToken.totalSupply();
+            uint256 totalSupply = LP_TOKEN.totalSupply();
             if (totalSupply > 0) {
-                feesPerLPToken1 += (feeAmount1 * 1e18) / totalSupply;
+                feesPerLpToken1 += (feeAmount1 * 1e18) / totalSupply;
             }
         }
     }
 
     /// @notice Calculate pending fees for an LP
     function pendingFees(address lp) external view returns (uint256 fees0, uint256 fees1) {
-        uint256 lpBalance = lpToken.balanceOf(lp);
+        uint256 lpBalance = LP_TOKEN.balanceOf(lp);
         if (lpBalance == 0) return (0, 0);
         
-        fees0 = (lpBalance * (feesPerLPToken0 - claimedFeesPerLPToken0[lp])) / 1e18;
-        fees1 = (lpBalance * (feesPerLPToken1 - claimedFeesPerLPToken1[lp])) / 1e18;
+        fees0 = (lpBalance * (feesPerLpToken0 - claimedFeesPerLpToken0[lp])) / 1e18;
+        fees1 = (lpBalance * (feesPerLpToken1 - claimedFeesPerLpToken1[lp])) / 1e18;
     }
 
     /// @notice Claim accumulated fees for an LP
     function claimFees(PoolKey calldata key) external returns (uint256 fees0, uint256 fees1) {
-        uint256 lpBalance = lpToken.balanceOf(msg.sender);
+        uint256 lpBalance = LP_TOKEN.balanceOf(msg.sender);
         require(lpBalance > 0, "No LP tokens");
         
         // Calculate pending fees
-        fees0 = (lpBalance * (feesPerLPToken0 - claimedFeesPerLPToken0[msg.sender])) / 1e18;
-        fees1 = (lpBalance * (feesPerLPToken1 - claimedFeesPerLPToken1[msg.sender])) / 1e18;
+        fees0 = (lpBalance * (feesPerLpToken0 - claimedFeesPerLpToken0[msg.sender])) / 1e18;
+        fees1 = (lpBalance * (feesPerLpToken1 - claimedFeesPerLpToken1[msg.sender])) / 1e18;
         
         if (fees0 > 0 || fees1 > 0) {
             bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, fees0, fees1, 2)); // 2 = claim fees
@@ -468,8 +466,8 @@ contract ParityPool is BaseHook, SafeCallback {
         internal returns (bytes memory) {
         
         // Update claimed fees tracking
-        claimedFeesPerLPToken0[user] = feesPerLPToken0;
-        claimedFeesPerLPToken1[user] = feesPerLPToken1;
+        claimedFeesPerLpToken0[user] = feesPerLpToken0;
+        claimedFeesPerLpToken1[user] = feesPerLpToken1;
         
         // Deduct from accumulated fees
         accumulatedFees0 -= fees0;
@@ -495,11 +493,11 @@ contract ParityPool is BaseHook, SafeCallback {
     
     /// @notice Get protocol fees accumulated
     function getProtocolFees(address token) external view returns (uint256) {
-        return protocolRevenue.getProtocolFees(token);
+        return PROTOCOL_REVENUE.getProtocolFees(token);
     }
     
     /// @notice Get the protocol revenue contract address
     function getProtocolRevenue() external view returns (address) {
-        return address(protocolRevenue);
+        return address(PROTOCOL_REVENUE);
     }
 }

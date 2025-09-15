@@ -6,15 +6,15 @@ import {ERC20} from "solmate/src/tokens/ERC20.sol";
 /// @title Parity LP Token
 /// @notice ERC20 token representing liquidity provider shares in the parity pool
 contract ParityLP is ERC20 {
-    address public immutable hook;
+    address public immutable HOOK;
     
     modifier onlyHook() {
-        require(msg.sender == hook, "Only hook can mint/burn");
+        require(msg.sender == HOOK, "Only hook can mint/burn");
         _;
     }
     
     constructor(address _hook) ERC20("Parity LP", "PLP", 18) {
-        hook = _hook;
+        HOOK = _hook;
     }
     
     /// @notice Mint LP tokens to liquidity provider

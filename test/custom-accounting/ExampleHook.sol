@@ -6,24 +6,22 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
-import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {CurrencySettler} from "v4-core/test/utils/CurrencySettler.sol";
 import {BaseTestHooks} from "v4-core/src/test/BaseTestHooks.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
 
 contract ExampleHook is BaseTestHooks {
     using Hooks for IHooks;
     using CurrencySettler for Currency;
 
-    IPoolManager immutable manager;
+    IPoolManager immutable MANAGER;
 
     constructor(IPoolManager _manager) {
-        manager = _manager;
+        MANAGER = _manager;
     }
 
     modifier onlyPoolManager() {
-        require(msg.sender == address(manager));
+        require(msg.sender == address(MANAGER));
         _;
     }
 
@@ -37,9 +35,9 @@ contract ExampleHook is BaseTestHooks {
 
         // this "custom curve" is a line, 1-1
         // take the full input amount, and give the full output amount
-        manager.take(inputCurrency, address(this), amount);
+        MANAGER.take(inputCurrency, address(this), amount);
 
-        outputCurrency.settle(manager, address(this), amount, false);
+        outputCurrency.settle(MANAGER, address(this), amount, false);
 
         // return -amountSpecified as specified to no-op the concentrated liquidity swap
         BeforeSwapDelta hookDelta = toBeforeSwapDelta(int128(-params.amountSpecified), int128(params.amountSpecified));

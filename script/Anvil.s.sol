@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "forge-std/Script.sol";
+import {Script} from "forge-std/Script.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolManager} from "v4-core/src/PoolManager.sol";
@@ -13,14 +13,13 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {Constants} from "v4-core/src/../test/utils/Constants.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
 import {ParityPool} from "../src/ParityPool.sol";
 import {StETH} from "../src/StETH.sol";
 import {HookMiner} from "v4-periphery/src/utils/HookMiner.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
 import {PositionManager} from "v4-periphery/src/PositionManager.sol";
 import {EasyPosm} from "../test/utils/EasyPosm.sol";
-import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 import {DeployPermit2} from "../test/utils/forks/DeployPermit2.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IPositionDescriptor} from "v4-periphery/src/interfaces/IPositionDescriptor.sol";
@@ -35,7 +34,7 @@ contract ParityPoolScript is Script, DeployPermit2 {
     IPositionManager posm;
     PoolModifyLiquidityTest lpRouter;
     PoolSwapTest swapRouter;
-    StETH stETH;
+    StETH stEth;
 
     function setUp() public {}
 
@@ -118,24 +117,24 @@ contract ParityPoolScript is Script, DeployPermit2 {
 
     function testLifecycle(address hook) internal {
         // Deploy stETH token
-        stETH = new StETH();
-        stETH.mint(msg.sender, 100_000 ether);
+        stEth = new StETH();
+        stEth.mint(msg.sender, 100_000 ether);
         
         // ETH is native token (address(0)), stETH is ERC20
         Currency ethCurrency = Currency.wrap(address(0));
-        Currency stETHCurrency = Currency.wrap(address(stETH));
+        Currency stEthCurrency = Currency.wrap(address(stEth));
 
         // initialize the pool - ETH/stETH pool
         int24 tickSpacing = 60;
         PoolKey memory poolKey =
-            PoolKey(ethCurrency, stETHCurrency, 3000, tickSpacing, IHooks(hook));
+            PoolKey(ethCurrency, stEthCurrency, 3000, tickSpacing, IHooks(hook));
         manager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
 
         // approve stETH to the routers (ETH doesn't need approval as it's native)
-        stETH.approve(address(lpRouter), type(uint256).max);
-        stETH.approve(address(swapRouter), type(uint256).max);
+        stEth.approve(address(lpRouter), type(uint256).max);
+        stEth.approve(address(swapRouter), type(uint256).max);
         // Only approve stETH for POSM (ETH is handled natively)
-        approvePosmCurrency(posm, stETHCurrency);
+        approvePosmCurrency(posm, stEthCurrency);
 
         // add full range liquidity to the pool
         int24 tickLower = TickMath.minUsableTick(tickSpacing);

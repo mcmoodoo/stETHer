@@ -2,13 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
-import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
 /// @title Protocol Revenue Management
 /// @notice Handles protocol fee collection and distribution
 contract ProtocolRevenue {
-    address public immutable owner;
+    address public immutable OWNER;
     address public treasury;
     
     /// @notice Protocol fee settings
@@ -26,12 +24,12 @@ contract ProtocolRevenue {
     event FeeParametersUpdated(uint256 feePercentage, uint256 threshold, uint256 largeFee);
     
     modifier onlyOwner() {
-        require(msg.sender == owner, "Not authorized");
+        require(msg.sender == OWNER, "Not authorized");
         _;
     }
     
     constructor(address _treasury) {
-        owner = msg.sender;
+        OWNER = msg.sender;
         treasury = _treasury;
     }
     
@@ -68,8 +66,8 @@ contract ProtocolRevenue {
         require(protocolFees[token] >= amount, "Insufficient protocol fees");
         
         protocolFees[token] -= amount;
-        IERC20(token).transfer(treasury, amount);
-        
+        require(IERC20(token).transfer(treasury, amount), "Transfer failed");
+
         emit ProtocolFeeWithdrawn(token, amount, treasury);
     }
     
