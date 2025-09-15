@@ -16,8 +16,8 @@ After implementing the rebasing stETH token with 5% APY and asymmetric fees, all
 | **EasyPosmTest** | 7/7 ✅ | PASS | Position manager utilities |
 | **ETHStETHSimpleTest** | 5/5 ✅ | PASS | Basic ETH-stETH operations |
 | **StETHTest** | 10/10 ✅ | PASS | Core stETH token functionality |
-| **CounterTest** | 3/3 ✅ | PASS | Constant-sum swap mechanics |
-| **CounterExtendedTest** | 12/12 ✅ | PASS | Extended hook functionality |
+| **ParityPoolTest** | 3/3 ✅ | PASS | Constant-sum swap mechanics |
+| **ParityPoolExtendedTest** | 12/12 ✅ | PASS | Extended hook functionality |
 
 ### 🎯 **Key Test Fixes Applied**
 

@@ -7,11 +7,11 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {Counter} from "../src/Counter.sol";
+import {ParityPool} from "../src/ParityPool.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
 contract DynamicFeesSimpleTest is Test, Fixtures {
-    Counter hook;
+    ParityPool hook;
 
     function setUp() public {
         deployFreshManagerAndRouters();
@@ -23,8 +23,8 @@ contract DynamicFeesSimpleTest is Test, Fixtures {
                 ^ (0x4447 << 144)
         );
         bytes memory constructorArgs = abi.encode(manager, address(0x999)); // treasury address
-        deployCodeTo("Counter.sol:Counter", constructorArgs, flags);
-        hook = Counter(flags);
+        deployCodeTo("ParityPool.sol:ParityPool", constructorArgs, flags);
+        hook = ParityPool(flags);
 
         key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
         manager.initialize(key, SQRT_PRICE_1_1);

@@ -6,11 +6,11 @@ import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
 import {Constants} from "./base/Constants.sol";
-import {Counter} from "../src/Counter.sol";
+import {ParityPool} from "../src/ParityPool.sol";
 import {HookMiner} from "v4-periphery/src/utils/HookMiner.sol";
 
-/// @notice Mines the address and deploys the Counter.sol Hook contract
-contract CounterScript is Script, Constants {
+/// @notice Mines the address and deploys the ParityPool.sol Hook contract
+contract ParityPoolScript is Script, Constants {
     function setUp() public {}
 
     function run() public {
@@ -24,11 +24,11 @@ contract CounterScript is Script, Constants {
         address treasury = address(0x999); // Default treasury for script
         bytes memory constructorArgs = abi.encode(POOLMANAGER, treasury);
         (address hookAddress, bytes32 salt) =
-            HookMiner.find(CREATE2_DEPLOYER, flags, type(Counter).creationCode, constructorArgs);
+            HookMiner.find(CREATE2_DEPLOYER, flags, type(ParityPool).creationCode, constructorArgs);
 
         // Deploy the hook using CREATE2
         vm.broadcast();
-        Counter counter = new Counter{salt: salt}(IPoolManager(POOLMANAGER), treasury);
-        require(address(counter) == hookAddress, "CounterScript: hook address mismatch");
+        ParityPool parityPool = new ParityPool{salt: salt}(IPoolManager(POOLMANAGER), treasury);
+        require(address(parityPool) == hookAddress, "ParityPoolScript: hook address mismatch");
     }
 }

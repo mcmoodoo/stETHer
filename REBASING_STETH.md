@@ -96,7 +96,7 @@ function getSharePrice() external view returns (uint256)
 - Monitor share price appreciation
 - Debug and analytics support
 
-## Integration with Counter Hook
+## Integration with ParityPool Hook
 
 ### **Pool Impact**
 

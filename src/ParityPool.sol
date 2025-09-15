@@ -14,16 +14,16 @@ import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {SafeCast} from "v4-core/src/libraries/SafeCast.sol";
-import {ConstantSumLP} from "./ConstantSumLP.sol";
+import {ParityLP} from "./ParityLP.sol";
 import {ProtocolRevenue} from "./ProtocolRevenue.sol";
 
-contract Counter is BaseHook, SafeCallback {
+contract ParityPool is BaseHook, SafeCallback {
     using SafeCast for uint256;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
 
     /// @notice LP token for this pool
-    ConstantSumLP public immutable lpToken;
+    ParityLP public immutable lpToken;
     
     /// @notice Protocol revenue management
     ProtocolRevenue public immutable protocolRevenue;
@@ -44,7 +44,7 @@ contract Counter is BaseHook, SafeCallback {
     mapping(address => uint256) public claimedFeesPerLPToken1;
 
     constructor(IPoolManager poolManager_, address treasury) SafeCallback(poolManager_) {
-        lpToken = new ConstantSumLP(address(this));
+        lpToken = new ParityLP(address(this));
         protocolRevenue = new ProtocolRevenue(treasury);
     }
 

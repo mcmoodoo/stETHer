@@ -97,7 +97,7 @@ slither:
 .PHONY: test-file
 test-file:
 	@echo "Usage: make test-file FILE=<test-file-name>"
-	@echo "Example: make test-file FILE=Counter"
+	@echo "Example: make test-file FILE=ParityPool"
 	forge test --match-path test/$(FILE).t.sol -vvv
 
 # Run specific test function

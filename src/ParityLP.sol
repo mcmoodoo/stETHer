@@ -3,9 +3,9 @@ pragma solidity ^0.8.24;
 
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 
-/// @title Constant Sum LP Token
-/// @notice ERC20 token representing liquidity provider shares in the constant-sum pool
-contract ConstantSumLP is ERC20 {
+/// @title Parity LP Token
+/// @notice ERC20 token representing liquidity provider shares in the parity pool
+contract ParityLP is ERC20 {
     address public immutable hook;
     
     modifier onlyHook() {
@@ -13,7 +13,7 @@ contract ConstantSumLP is ERC20 {
         _;
     }
     
-    constructor(address _hook) ERC20("Constant Sum LP", "CSLP", 18) {
+    constructor(address _hook) ERC20("Parity LP", "PLP", 18) {
         hook = _hook;
     }
     

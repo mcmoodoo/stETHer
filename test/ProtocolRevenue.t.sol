@@ -7,14 +7,14 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {Counter} from "../src/Counter.sol";
-import {ConstantSumLP} from "../src/ConstantSumLP.sol";
+import {ParityPool} from "../src/ParityPool.sol";
+import {ParityLP} from "../src/ParityLP.sol";
 import {ProtocolRevenue} from "../src/ProtocolRevenue.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
 contract ProtocolRevenueTest is Test, Fixtures {
-    Counter hook;
-    ConstantSumLP lpToken;
+    ParityPool hook;
+    ParityLP lpToken;
     ProtocolRevenue protocolRevenue;
     address treasury = address(0x999);
 
@@ -28,8 +28,8 @@ contract ProtocolRevenueTest is Test, Fixtures {
                 ^ (0x4450 << 144)
         );
         bytes memory constructorArgs = abi.encode(manager, treasury);
-        deployCodeTo("Counter.sol:Counter", constructorArgs, flags);
-        hook = Counter(flags);
+        deployCodeTo("ParityPool.sol:ParityPool", constructorArgs, flags);
+        hook = ParityPool(flags);
         lpToken = hook.lpToken();
         protocolRevenue = ProtocolRevenue(hook.getProtocolRevenue());
 

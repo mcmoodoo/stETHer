@@ -10,11 +10,11 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
-import {Counter} from "../src/Counter.sol";
+import {ParityPool} from "../src/ParityPool.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
-contract CounterExtendedTest is Test, Fixtures {
-    Counter hook;
+contract ParityPoolExtendedTest is Test, Fixtures {
+    ParityPool hook;
     
     function setUp() public {
         deployFreshManagerAndRouters();
@@ -26,8 +26,8 @@ contract CounterExtendedTest is Test, Fixtures {
                 ^ (0x4445 << 144)
         );
         bytes memory constructorArgs = abi.encode(manager, address(0x999)); // treasury address
-        deployCodeTo("Counter.sol:Counter", constructorArgs, flags);
-        hook = Counter(flags);
+        deployCodeTo("ParityPool.sol:ParityPool", constructorArgs, flags);
+        hook = ParityPool(flags);
 
         key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
         manager.initialize(key, SQRT_PRICE_1_1);

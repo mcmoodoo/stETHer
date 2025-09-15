@@ -59,7 +59,7 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant LP as Liquidity Provider
-    participant Pool as ConstantSum Pool
+    participant Pool as ParityPool
     participant LPToken as LP Token Contract
     participant stETH as stETH Token
 
@@ -93,7 +93,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Trader as Trader
-    participant Pool as ConstantSum Pool
+    participant Pool as ParityPool
     participant Revenue as Revenue Manager
     participant stETH as stETH Token
 
@@ -191,8 +191,8 @@ The system is completely sustainable because it only spends what it earns.
 
 ### Smart Contract Components
 
-1. **Main Pool Contract** (`Counter.sol`): Core AMM logic and Uniswap v4 hook integration
-2. **LP Token** (`ConstantSumLP.sol`): ERC20 token for liquidity provider shares
+1. **Main Pool Contract** (`ParityPool.sol`): Core AMM logic and Uniswap v4 hook integration
+2. **LP Token** (`ParityLP.sol`): ERC20 token for liquidity provider shares
 3. **Revenue Manager** (`RevenueManager.sol`): Fee calculation and distribution
 4. **Rebasing Token** (`StETH.sol`): Mock stETH with 5% APY for testing
 

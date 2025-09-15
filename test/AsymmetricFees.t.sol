@@ -2,14 +2,14 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import "../src/Counter.sol";
+import "../src/ParityPool.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 
 contract AsymmetricFeesTest is Test {
-    Counter hook;
+    ParityPool hook;
     
     function setUp() public {
         // Deploy the hook (would need actual PoolManager in real test)
