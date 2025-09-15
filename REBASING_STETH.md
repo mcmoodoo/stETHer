@@ -100,7 +100,7 @@ function getSharePrice() external view returns (uint256)
 
 ### **Pool Impact**
 
-When stETH is used in the constant-sum pool:
+When stETH is used in the parity pool:
 
 1. **Liquidity Providers**: Deposit ETH + stETH, receive LP tokens
 2. **stETH Appreciation**: Pool's stETH balance grows over time
@@ -186,7 +186,7 @@ uint256 newBalance = poolManager.balanceOf(hook, stETH_ID); // > 100 ether
 
 ## Key Benefits
 
-### 🎯 **For Constant-Sum Pool**
+### 🎯 **For Parity Pool**
 - **Real Yield Generation**: Actual stETH appreciation, not just accounting
 - **LP Incentives**: LPs earn staking yield on their deposits
 - **Arbitrage Resistance**: Fees protect yield for LPs
@@ -239,4 +239,4 @@ forge test --match-contract StETHRebasingTest -v
 
 ---
 
-This rebasing stETH implementation provides **real yield generation** for your constant-sum pool, creating genuine economic incentives for liquidity providers while maintaining the desired 1:1 swap functionality with asymmetric fee protection.
+This rebasing stETH implementation provides **real yield generation** for your parity pool, creating genuine economic incentives for liquidity providers while maintaining the desired 1:1 swap functionality with asymmetric fee protection.

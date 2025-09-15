@@ -10,9 +10,9 @@ Regular constant product AMM is not a good choice here, because for assets like 
 
 ## Core Innovation (0:30 - 0:50)
 
-"So I built this using x plus y equals k instead. Let me show you the core hook implementation... Here's the constant-sum logic that enables perfect 1:1 swaps when the pool is balanced. No bonding curve, no slippage - just direct swaps at fair prices."
+"So I built this using x plus y equals k instead. Let me show you the core hook implementation... Here's the parity logic that enables perfect 1:1 swaps when the pool is balanced. No bonding curve, no slippage - just direct swaps at fair prices."
 
-_[Show ParityPool.sol, point to constant-sum math]_
+_[Show ParityPool.sol, point to parity math]_
 
 ## Dynamic Fee System (0:50 - 1:10)
 
@@ -50,4 +50,4 @@ _[Show test results: make test output]_
 - **Tone**: Confident but not arrogant, technical but accessible
 - **Visual Cues**: Time code indicates when to show specific code sections
 - **Emphasis**: Stress the economic innovation and self-balancing nature
-- **Key Terms**: Constant-sum, dynamic fees, rebasing tokens, self-balancing
+- **Key Terms**: Parity pool, dynamic fees, rebasing tokens, self-balancing

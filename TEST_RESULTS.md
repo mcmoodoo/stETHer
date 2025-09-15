@@ -16,7 +16,7 @@ After implementing the rebasing stETH token with 5% APY and asymmetric fees, all
 | **EasyPosmTest** | 7/7 ✅ | PASS | Position manager utilities |
 | **ETHStETHSimpleTest** | 5/5 ✅ | PASS | Basic ETH-stETH operations |
 | **StETHTest** | 10/10 ✅ | PASS | Core stETH token functionality |
-| **ParityPoolTest** | 3/3 ✅ | PASS | Constant-sum swap mechanics |
+| **ParityPoolTest** | 3/3 ✅ | PASS | Parity swap mechanics |
 | **ParityPoolExtendedTest** | 12/12 ✅ | PASS | Extended hook functionality |
 
 ### 🎯 **Key Test Fixes Applied**
@@ -90,7 +90,7 @@ Success Rate: 100% (49/49 tests)
 
 ### **✅ Hook Integration**
 - Asymmetric fee application
-- Constant-sum swap logic
+- Parity swap logic
 - Liquidity management
 - Custom accounting
 
@@ -111,7 +111,7 @@ Success Rate: 100% (49/49 tests)
 **✅ All systems operational**
 - Rebasing stETH with 5% APY: **WORKING**
 - Asymmetric fees (0% ETH→stETH, 0.1% stETH→ETH): **WORKING**  
-- Constant-sum 1:1 swaps: **WORKING**
+- Parity 1:1 swaps: **WORKING**
 - Share-based yield distribution: **WORKING**
 - ERC20 compatibility: **WORKING**
 - Comprehensive test coverage: **COMPLETE**

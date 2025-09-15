@@ -70,7 +70,7 @@ function App() {
           <Card className="w-full max-w-md mx-auto">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Constant Sum Pool
+                Parity Pool
                 <div className="flex items-center gap-2">
                   <LocalhostButton />
                   <WalletConnect />
@@ -170,13 +170,13 @@ function App() {
           <Card>
             <CardHeader>
               <CardTitle>Pool Details</CardTitle>
-              <CardDescription>ETH/stETH Constant Sum Pool</CardDescription>
+              <CardDescription>ETH/stETH Parity Pool</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm font-medium">Pool Type:</span>
-                  <span className="text-sm">Constant Sum (1:1)</span>
+                  <span className="text-sm">Parity (1:1)</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">

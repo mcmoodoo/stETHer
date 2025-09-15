@@ -1,4 +1,4 @@
-# Uniswap v4 Constant Sum Pool with Dynamic Fees
+# Uniswap v4 Parity Pool with Dynamic Fees
 
 ## How It Works
 
@@ -7,7 +7,7 @@ graph TB
     subgraph "Pool State"
         ETH[ETH Balance]
         STETH[stETH Balance]
-        INVARIANT["x + y = k<br/>(Constant Sum)"]
+        INVARIANT["x + y = k<br/>(Parity Invariant)"]
     end
 
     subgraph "Trading Flow"
@@ -200,7 +200,7 @@ The system is completely sustainable because it only spends what it earns.
 
 - `addLiquidity()`: Add liquidity and receive LP tokens
 - `removeLiquidity()`: Burn LP tokens and withdraw assets + accumulated fees
-- `beforeSwap()`: Uniswap v4 hook that implements constant-sum swaps with dynamic fees
+- `beforeSwap()`: Uniswap v4 hook that implements parity swaps with dynamic fees
 - `claimFees()`: Allow LPs to claim accumulated fees
 - `rebase()`: Update stETH balances based on time-based yield
 
@@ -290,10 +290,10 @@ make stop
 
 ## What Makes This Special
 
-I'm pretty sure this is the first constant-sum AMM built on Uniswap v4, and definitely the first AMM that properly handles rebasing tokens without destroying the underlying yield.
+I'm pretty sure this is the first parity pool AMM built on Uniswap v4, and definitely the first AMM that properly handles rebasing tokens without destroying the underlying yield.
 
 The dynamic fee system is also something new - most AMMs just have fixed fees that don't respond to market conditions. My fees actually get smarter based on what's happening in the pool.
 
 But the real innovation is how all the pieces work together. The fees fund the incentives, the incentives balance the pool, the balancing reduces the fees - it's a self-sustaining economic loop that gets more stable over time rather than less.
 
-I think this could be a template for how to build AMMs for any pair of correlated assets, not just ETH/stETH. The constant-sum invariant just makes so much more sense when you know the assets should trade near 1:1.
+I think this could be a template for how to build AMMs for any pair of correlated assets, not just ETH/stETH. The parity invariant just makes so much more sense when you know the assets should trade near 1:1.

@@ -71,7 +71,7 @@ contract ParityPool is BaseHook, SafeCallback {
         });
     }
 
-    /// @notice Constant sum swap via custom accounting, tokens are exchanged 1:1 with asymmetric fees
+    /// @notice Parity swap via custom accounting, tokens are exchanged 1:1 with asymmetric fees
     function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         internal
         override
@@ -248,7 +248,7 @@ contract ParityPool is BaseHook, SafeCallback {
     // -----------------------------------------------
     // Liquidity Functions, not production ready
     // -----------------------------------------------
-    /// @notice Add liquidity 1:1 for the constant sum curve
+    /// @notice Add liquidity 1:1 for the parity curve
     /// @param key PoolKey of the pool to add liquidity to
     /// @param amountPerToken The amount of each token to be added as liquidity
     /// @return lpTokens Amount of LP tokens minted to the liquidity provider
