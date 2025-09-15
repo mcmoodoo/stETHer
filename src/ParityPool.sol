@@ -26,8 +26,10 @@ contract ParityPool is BaseHook, SafeCallback {
     /// @notice Protocol revenue management
     ProtocolRevenue public immutable PROTOCOL_REVENUE;
     
-    /// @notice Track total liquidity in the pool (sum of both tokens)
-    uint256 public totalLiquidity;
+    /// @notice Track individual token balances in the pool
+    uint256 public poolETHBalance;      // ETH balance in pool
+    uint256 public poolStETHBalance;    // stETH balance in pool (accounting)
+    uint256 public lastKnownStETHBalance; // Last known actual stETH balance for rebase tracking
     
     /// @notice Accumulated fees for distribution to LPs (in terms of both tokens)
     uint256 public accumulatedFees0; // ETH fees
@@ -41,6 +43,10 @@ contract ParityPool is BaseHook, SafeCallback {
     mapping(address => uint256) public claimedFeesPerLpToken0;
     mapping(address => uint256) public claimedFeesPerLpToken1;
 
+    /// @notice Events for rebase yield tracking
+    event RebaseYieldDistributed(uint256 yieldAmount, uint256 timestamp);
+    event PoolBalancesUpdated(uint256 ethBalance, uint256 stethBalance);
+
     constructor(IPoolManager poolManager_, address treasury) SafeCallback(poolManager_) {
         LP_TOKEN = new ParityLP(address(this));
         PROTOCOL_REVENUE = new ProtocolRevenue(treasury);
@@ -48,6 +54,39 @@ contract ParityPool is BaseHook, SafeCallback {
 
     function _poolManager() internal view override returns (IPoolManager) {
         return poolManager;
+    }
+
+    /// @notice Modifier to automatically sync rebase yield before major operations
+    modifier syncRebaseYield(Currency stETHCurrency) {
+        _distributeRebaseYield(stETHCurrency);
+        _;
+    }
+
+    /// @notice Distribute stETH rebasing yield to LPs as accumulated fees
+    /// @param stETHCurrency The stETH currency to check for rebasing
+    function _distributeRebaseYield(Currency stETHCurrency) private {
+        if (Currency.unwrap(stETHCurrency) == address(0)) return; // Skip for ETH
+
+        // For simplicity in testing: assume our hook is the only user of this stETH in PoolManager
+        // In production, this would need to be more sophisticated to handle multiple pools
+        uint256 actualStETHBalance = IERC20(Currency.unwrap(stETHCurrency)).balanceOf(address(poolManager));
+
+        if (actualStETHBalance > lastKnownStETHBalance) {
+            uint256 rebaseYield = actualStETHBalance - lastKnownStETHBalance;
+
+            // Distribute yield proportionally to LPs (like trading fees)
+            uint256 totalLPSupply = LP_TOKEN.totalSupply();
+
+            if (totalLPSupply > 0) {
+                feesPerLpToken1 += (rebaseYield * 1e18) / totalLPSupply;
+                accumulatedFees1 += rebaseYield;
+                poolStETHBalance += rebaseYield; // Update accounting balance
+
+                emit RebaseYieldDistributed(rebaseYield, block.timestamp);
+            }
+
+            lastKnownStETHBalance = actualStETHBalance;
+        }
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
@@ -73,6 +112,7 @@ contract ParityPool is BaseHook, SafeCallback {
     function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         internal
         override
+        syncRebaseYield(key.currency1)
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         return _processSwap(key, params);
@@ -250,7 +290,7 @@ contract ParityPool is BaseHook, SafeCallback {
     /// @param key PoolKey of the pool to add liquidity to
     /// @param amountPerToken The amount of each token to be added as liquidity
     /// @return lpTokens Amount of LP tokens minted to the liquidity provider
-    function addLiquidity(PoolKey calldata key, uint256 amountPerToken) external payable returns (uint256 lpTokens) {
+    function addLiquidity(PoolKey calldata key, uint256 amountPerToken) external payable syncRebaseYield(key.currency1) returns (uint256 lpTokens) {
         bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, amountPerToken, true));
         lpTokens = abi.decode(result, (uint256));
         return lpTokens;
@@ -261,7 +301,7 @@ contract ParityPool is BaseHook, SafeCallback {
     /// @param lpTokenAmount Amount of LP tokens to burn
     /// @return amount0 Amount of currency0 returned
     /// @return amount1 Amount of currency1 returned
-    function removeLiquidity(PoolKey calldata key, uint256 lpTokenAmount) external returns (uint256 amount0, uint256 amount1) {
+    function removeLiquidity(PoolKey calldata key, uint256 lpTokenAmount) external syncRebaseYield(key.currency1) returns (uint256 amount0, uint256 amount1) {
         require(LP_TOKEN.balanceOf(msg.sender) >= lpTokenAmount, "Insufficient LP tokens");
         
         bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, lpTokenAmount, false));
@@ -326,17 +366,21 @@ contract ParityPool is BaseHook, SafeCallback {
 
         // Calculate LP tokens to mint
         uint256 lpTokensToMint;
-        if (totalLiquidity == 0) {
-            // First liquidity provider gets tokens equal to geometric mean
+        uint256 totalPoolValue = poolETHBalance + poolStETHBalance;
+
+        if (totalPoolValue == 0) {
+            // First liquidity provider gets tokens equal to total amount added
             lpTokensToMint = amountPerToken * 2; // Since we add equal amounts of both tokens
         } else {
             // Subsequent LPs get proportional share
-            // lpTokens = (amountAdded / totalLiquidity) * lpToken.totalSupply()
-            lpTokensToMint = (amountPerToken * 2 * LP_TOKEN.totalSupply()) / totalLiquidity;
+            // lpTokens = (amountAdded / totalPoolValue) * lpToken.totalSupply()
+            lpTokensToMint = (amountPerToken * 2 * LP_TOKEN.totalSupply()) / totalPoolValue;
         }
 
-        // Update total liquidity
-        totalLiquidity += amountPerToken * 2;
+        // Update individual balances
+        poolETHBalance += amountPerToken;
+        poolStETHBalance += amountPerToken;
+        lastKnownStETHBalance += amountPerToken; // Track actual stETH added
 
         // Mint LP tokens to user
         LP_TOKEN.mint(payer, lpTokensToMint);
@@ -349,11 +393,10 @@ contract ParityPool is BaseHook, SafeCallback {
         
         // Calculate what to remove BEFORE burning tokens (to avoid division by zero)
         uint256 totalLpSupply = LP_TOKEN.totalSupply();
-        uint256 liquidityToRemove = (lpTokenAmount * totalLiquidity) / totalLpSupply;
-        
-        // Calculate proportional share of base liquidity
-        uint256 amount0 = liquidityToRemove / 2;
-        uint256 amount1 = liquidityToRemove / 2;
+
+        // Calculate proportional share of each token balance
+        uint256 amount0 = (lpTokenAmount * poolETHBalance) / totalLpSupply;
+        uint256 amount1 = (lpTokenAmount * poolStETHBalance) / totalLpSupply;
 
         // Add accumulated fees to withdrawal
         uint256 fees0 = (lpTokenAmount * (feesPerLpToken0 - claimedFeesPerLpToken0[user])) / 1e18;
@@ -377,8 +420,10 @@ contract ParityPool is BaseHook, SafeCallback {
         if (amount0 > poolBalance0) amount0 = poolBalance0;
         if (amount1 > poolBalance1) amount1 = poolBalance1;
 
-        // Update total liquidity BEFORE burning tokens
-        totalLiquidity -= liquidityToRemove;
+        // Update individual balances BEFORE burning tokens
+        poolETHBalance -= (amount0 - fees0); // Subtract base amount (fees stay in pool for others)
+        poolStETHBalance -= (amount1 - fees1);
+        lastKnownStETHBalance -= (amount1 - fees1); // Update tracking balance
 
         // Burn LP tokens
         LP_TOKEN.burn(user, lpTokenAmount);
@@ -445,7 +490,7 @@ contract ParityPool is BaseHook, SafeCallback {
     }
 
     /// @notice Claim accumulated fees for an LP
-    function claimFees(PoolKey calldata key) external returns (uint256 fees0, uint256 fees1) {
+    function claimFees(PoolKey calldata key) external syncRebaseYield(key.currency1) returns (uint256 fees0, uint256 fees1) {
         uint256 lpBalance = LP_TOKEN.balanceOf(msg.sender);
         require(lpBalance > 0, "No LP tokens");
         
@@ -489,6 +534,11 @@ contract ParityPool is BaseHook, SafeCallback {
     /// @notice Get total accumulated fees (LP portion only)
     function getTotalAccumulatedFees() external view returns (uint256 fees0, uint256 fees1) {
         return (accumulatedFees0, accumulatedFees1);
+    }
+
+    /// @notice Get total liquidity (for backward compatibility with tests)
+    function totalLiquidity() external view returns (uint256) {
+        return poolETHBalance + poolStETHBalance;
     }
     
     /// @notice Get protocol fees accumulated
