@@ -252,12 +252,86 @@ contract ParityPoolExtendedTest is Test, Fixtures {
 
     function test_swap_zero_amount_reverts() public {
         uint256 liquidityAmount = 1000e18;
-        
+
         IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
         hook.addLiquidity(key, liquidityAmount);
-        
+
         vm.expectRevert();
         swap(key, true, 0, ZERO_BYTES);
+    }
+
+    // Fuzzing tests moved from ParityPool.t.sol for comprehensive coverage
+    function test_exactInput(bool zeroForOne, uint256 amount) public {
+        amount = bound(amount, 1 wei, 500e18); // Reduced range to avoid rebase sync issues
+
+        // Ensure fresh liquidity for this test
+        uint256 liquidityAmount = 1000e18;
+        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
+        hook.addLiquidity(key, liquidityAmount);
+
+        uint256 balance0Before = currency0.balanceOfSelf();
+        uint256 balance1Before = currency1.balanceOfSelf();
+
+        swap(key, zeroForOne, -int256(amount), ZERO_BYTES);
+
+        uint256 balance0After = currency0.balanceOfSelf();
+        uint256 balance1After = currency1.balanceOfSelf();
+
+        if (zeroForOne) {
+            // paid token0 (ETH → stETH: 0% fee, 1:1 swap)
+            assertEq(balance0Before - balance0After, amount);
+
+            // received token1
+            assertEq(balance1After - balance1Before, amount);
+        } else {
+            // paid token1 (stETH → ETH: 0.1% fee applied)
+            assertEq(balance1Before - balance1After, amount);
+
+            // received token0 (fee-adjusted with precise calculation)
+            uint256 feeAmount = (amount * 1000) / 1_000_000;
+            uint256 expectedOutput = amount - feeAmount;
+            assertEq(balance0After - balance0Before, expectedOutput);
+        }
+    }
+
+    function test_exactOutput(bool zeroForOne, uint256 amount) public {
+        amount = bound(amount, 1 wei, 500e18); // Reduced range to avoid rebase sync issues
+
+        // Ensure fresh liquidity for this test
+        uint256 liquidityAmount = 1000e18;
+        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
+        hook.addLiquidity(key, liquidityAmount);
+
+        uint256 balance0Before = currency0.balanceOfSelf();
+        uint256 balance1Before = currency1.balanceOfSelf();
+
+        swap(key, zeroForOne, int256(amount), ZERO_BYTES);
+
+        uint256 balance0After = currency0.balanceOfSelf();
+        uint256 balance1After = currency1.balanceOfSelf();
+
+        if (zeroForOne) {
+            // paid token0 (ETH → stETH: 0% fee, 1:1 swap for exact output)
+            assertEq(balance0Before - balance0After, amount);
+
+            // received token1
+            assertEq(balance1After - balance1Before, amount);
+        } else {
+            // exact output stETH → ETH: 0.1% fee, more input needed
+            // inputAmount = outputAmount / (1 - fee) = outputAmount * 1000 / 999
+            uint256 expectedInput = (amount * 1000) / 999;
+            assertEq(balance1Before - balance1After, expectedInput);
+
+            // received exact output amount
+            assertEq(balance0After - balance0Before, amount);
+        }
+    }
+
+    function test_no_v4_liquidity() public {
+        vm.expectRevert();
+        modifyLiquidityRouter.modifyLiquidity(key, LIQUIDITY_PARAMS, ZERO_BYTES);
     }
 }

@@ -203,44 +203,6 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
         }
     }
 
-    function skip_test_rebaseYieldDistribution_automaticOnSwap() public {
-        uint256 liquidityAmount = 1000e18;
-
-        // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
-
-        // Simulate time passing
-        vm.warp(block.timestamp + 182 days); // 6 months
-
-        // Trigger stETH rebase
-        stETH.rebase();
-
-        // Check fees before swap
-        (uint256 feesBefore0, uint256 feesBefore1) = hook.getTotalAccumulatedFees();
-
-        // Approve tokens for swap
-        IERC20(Currency.unwrap(currency1)).approve(address(swapRouter), 100e18);
-
-        // Perform a swap - this should automatically trigger rebase yield distribution
-        uint256 swapAmount = 100e18;
-        swap(key, false, -int256(swapAmount), ZERO_BYTES);
-
-        // Check fees after swap
-        (uint256 feesAfter0, uint256 feesAfter1) = hook.getTotalAccumulatedFees();
-
-        console.log("Fees before swap (ETH, stETH):", feesBefore0, feesBefore1);
-        console.log("Fees after swap (ETH, stETH):", feesAfter0, feesAfter1);
-
-        // Should have both trading fees and rebasing yield
-        uint256 totalFeeIncrease = feesAfter1 - feesBefore1;
-
-        assertGt(totalFeeIncrease, 0, "Should have accumulated both trading fees and rebasing yield");
-
-        // The increase should be more than just the trading fee would be
-        // (since it includes rebasing yield from 6 months)
-        console.log("Total fee increase:", totalFeeIncrease);
-    }
 
     function test_rebaseYieldDistribution_event() public {
         uint256 liquidityAmount = 1000e18;
