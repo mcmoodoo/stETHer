@@ -54,12 +54,12 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
         // Check initial pool balances
         uint256 initialETHBalance = hook.poolETHBalance();
         uint256 initialStETHBalance = hook.poolStETHBalance();
-        uint256 initialLastKnown = hook.lastKnownStETHBalance();
+        uint256 initialPrincipal = hook.poolStETHPrincipal();
         uint256 poolManagerBalance = manager.balanceOf(address(hook), currency1.toId());
 
         console.log("Initial pool ETH balance:", initialETHBalance);
         console.log("Initial pool stETH balance:", initialStETHBalance);
-        console.log("Initial last known stETH balance:", initialLastKnown);
+        console.log("Initial stETH principal:", initialPrincipal);
         console.log("PoolManager balance for hook:", poolManagerBalance);
 
         // Check fees before rebasing
@@ -106,8 +106,8 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
         assertApproxEqAbs(userStETHAfter - userStETHBefore, claimedStETH, 1e15, "User balance should increase by claimed amount (tolerance: 0.001 ETH)");
 
         // Updated pool tracking should reflect rebasing
-        uint256 newLastKnown = hook.lastKnownStETHBalance();
-        assertGt(newLastKnown, initialLastKnown, "Last known balance should be updated after rebase");
+        uint256 newBalance = hook.poolStETHBalance();
+        assertGt(newBalance, initialStETHBalance, "Pool stETH balance should be updated after rebase");
     }
 
     function test_rebaseYieldDistribution_compounding() public {

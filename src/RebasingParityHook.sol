@@ -29,7 +29,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     /// @notice Track individual token balances in the pool
     uint256 public poolETHBalance;      // ETH balance in pool
     uint256 public poolStETHBalance;    // stETH balance in pool (accounting)
-    uint256 public lastKnownStETHBalance; // Last known actual stETH balance for rebase tracking
+    uint256 public poolStETHPrincipal;  // stETH principal (deposited/withdrawn amounts, no rebase)
     
     /// @notice Accumulated fees for distribution to LPs (in terms of both tokens)
     uint256 public accumulatedFees0; // ETH fees
@@ -67,25 +67,33 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     function _distributeRebaseYield(Currency stETHCurrency) private {
         if (Currency.unwrap(stETHCurrency) == address(0)) return; // Skip for ETH
 
-        // For simplicity in testing: assume our hook is the only user of this stETH in PoolManager
-        // In production, this would need to be more sophisticated to handle multiple pools
-        uint256 actualStETHBalance = IERC20(Currency.unwrap(stETHCurrency)).balanceOf(address(poolManager));
+        // Get hook's ERC6909 balance (this is the fixed claim amount)
+        uint256 hookERC6909Balance = poolManager.balanceOf(address(this), stETHCurrency.toId());
 
-        if (actualStETHBalance > lastKnownStETHBalance) {
-            uint256 rebaseYield = actualStETHBalance - lastKnownStETHBalance;
+        if (hookERC6909Balance == 0) return; // No tokens to rebase
 
-            // Distribute yield proportionally to LPs (like trading fees)
+        // Get actual stETH balance in pool manager (includes all rebases)
+        uint256 actualStETHInPoolManager = IERC20(Currency.unwrap(stETHCurrency)).balanceOf(address(poolManager));
+
+        // Calculate hook's proportional share of total rebase yield
+        // This assumes for now that this hook owns all stETH in pool manager
+        // TODO: In production, need to track multiple hooks' shares
+        if (actualStETHInPoolManager > poolStETHPrincipal) {
+            uint256 totalYieldInPoolManager = actualStETHInPoolManager - poolStETHPrincipal;
+
+            // Calculate undistributed yield (total yield minus what we've already distributed)
+            uint256 alreadyDistributed = accumulatedFees1; // All fees/yield distributed so far
+            uint256 newYield = totalYieldInPoolManager > alreadyDistributed ?
+                totalYieldInPoolManager - alreadyDistributed : 0;
+
             uint256 totalLPSupply = LP_TOKEN.totalSupply();
+            if (newYield > 0 && totalLPSupply > 0) {
+                feesPerLpToken1 += (newYield * 1e18) / totalLPSupply;
+                accumulatedFees1 += newYield;
+                poolStETHBalance = poolStETHPrincipal + totalYieldInPoolManager; // Update accounting
 
-            if (totalLPSupply > 0) {
-                feesPerLpToken1 += (rebaseYield * 1e18) / totalLPSupply;
-                accumulatedFees1 += rebaseYield;
-                poolStETHBalance += rebaseYield; // Update accounting balance
-
-                emit RebaseYieldDistributed(rebaseYield, block.timestamp);
+                emit RebaseYieldDistributed(newYield, block.timestamp);
             }
-
-            lastKnownStETHBalance = actualStETHBalance;
         }
     }
 
@@ -380,7 +388,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         // Update individual balances
         poolETHBalance += amountPerToken;
         poolStETHBalance += amountPerToken;
-        lastKnownStETHBalance += amountPerToken; // Track actual stETH added
+        poolStETHPrincipal += amountPerToken; // Track principal (no rebase yield)
 
         // Mint LP tokens to user
         LP_TOKEN.mint(payer, lpTokensToMint);
@@ -422,8 +430,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
         // Update individual balances BEFORE burning tokens
         poolETHBalance -= (amount0 - fees0); // Subtract base amount (fees stay in pool for others)
-        poolStETHBalance -= (amount1 - fees1);
-        lastKnownStETHBalance -= (amount1 - fees1); // Update tracking balance
+        poolStETHBalance -= (amount1 - fees1); // Reduce accounting balance
+        poolStETHPrincipal -= ((lpTokenAmount * poolStETHPrincipal) / totalLpSupply); // Reduce principal proportionally
 
         // Burn LP tokens
         LP_TOKEN.burn(user, lpTokenAmount);
