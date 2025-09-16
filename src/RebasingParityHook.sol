@@ -72,25 +72,35 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
         if (hookERC6909Balance == 0) return; // No tokens to rebase
 
-        // Get actual stETH balance in pool manager (includes all rebases)
-        uint256 actualStETHInPoolManager = IERC20(Currency.unwrap(stETHCurrency)).balanceOf(address(poolManager));
+        // Get total actual stETH in the pool manager (including rebases)
+        uint256 totalStETHInPoolManager = IERC20(Currency.unwrap(stETHCurrency)).balanceOf(address(poolManager));
 
-        // Calculate hook's proportional share of total rebase yield
-        // This assumes for now that this hook owns all stETH in pool manager
-        // TODO: In production, need to track multiple hooks' shares
-        if (actualStETHInPoolManager > poolStETHPrincipal) {
-            uint256 totalYieldInPoolManager = actualStETHInPoolManager - poolStETHPrincipal;
+        // Get total ERC6909 stETH balance across all hooks in the pool manager
+        uint256 totalERC6909Balance = poolManager.balanceOf(address(poolManager), stETHCurrency.toId());
+
+        // Calculate this hook's actual stETH value (proportional share of rebased total)
+        uint256 actualStETHValue;
+        if (totalERC6909Balance > 0) {
+            actualStETHValue = (hookERC6909Balance * totalStETHInPoolManager) / totalERC6909Balance;
+        } else {
+            // Fallback: if this is the only hook, our value equals the total
+            actualStETHValue = totalStETHInPoolManager;
+        }
+
+        // Calculate rebase yield for this hook only
+        if (actualStETHValue > poolStETHPrincipal) {
+            uint256 hookTotalYield = actualStETHValue - poolStETHPrincipal;
 
             // Calculate undistributed yield (total yield minus what we've already distributed)
             uint256 alreadyDistributed = accumulatedFees1; // All fees/yield distributed so far
-            uint256 newYield = totalYieldInPoolManager > alreadyDistributed ?
-                totalYieldInPoolManager - alreadyDistributed : 0;
+            uint256 newYield = hookTotalYield > alreadyDistributed ?
+                hookTotalYield - alreadyDistributed : 0;
 
             uint256 totalLPSupply = LP_TOKEN.totalSupply();
             if (newYield > 0 && totalLPSupply > 0) {
                 feesPerLpToken1 += (newYield * 1e18) / totalLPSupply;
                 accumulatedFees1 += newYield;
-                poolStETHBalance = poolStETHPrincipal + totalYieldInPoolManager; // Update accounting
+                poolStETHBalance = poolStETHPrincipal + hookTotalYield; // Update accounting
 
                 emit RebaseYieldDistributed(newYield, block.timestamp);
             }
