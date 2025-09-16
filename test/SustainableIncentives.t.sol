@@ -8,13 +8,13 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {ParityPool} from "../src/ParityPool.sol";
+import {RebasingParityHook} from "../src/RebasingParityHook.sol";
 import {ParityLP} from "../src/ParityLP.sol";
 import {ProtocolRevenue} from "../src/ProtocolRevenue.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
 contract SustainableIncentivesTest is Test, Fixtures {
-    ParityPool hook;
+    RebasingParityHook hook;
     ParityLP lpToken;
     ProtocolRevenue protocolRevenue;
     address treasury = address(0x999);
@@ -29,8 +29,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
                 ^ (0x4451 << 144)
         );
         bytes memory constructorArgs = abi.encode(manager, treasury);
-        deployCodeTo("ParityPool.sol:ParityPool", constructorArgs, flags);
-        hook = ParityPool(flags);
+        deployCodeTo("RebasingParityHook.sol:RebasingParityHook", constructorArgs, flags);
+        hook = RebasingParityHook(flags);
         lpToken = hook.LP_TOKEN();
         protocolRevenue = ProtocolRevenue(hook.getProtocolRevenue());
 

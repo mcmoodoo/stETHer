@@ -8,12 +8,12 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {ParityPool} from "../src/ParityPool.sol";
+import {RebasingParityHook} from "../src/RebasingParityHook.sol";
 import {ProtocolRevenue} from "../src/ProtocolRevenue.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
-contract ParityPoolBranchCoverageTest is Test, Fixtures {
-    ParityPool hook;
+contract RebasingParityHookBranchCoverageTest is Test, Fixtures {
+    RebasingParityHook hook;
     ProtocolRevenue protocolRevenue;
     address treasury = address(0x999);
 
@@ -31,8 +31,8 @@ contract ParityPoolBranchCoverageTest is Test, Fixtures {
                 ^ (0x4449 << 144)
         );
         bytes memory constructorArgs = abi.encode(manager, treasury);
-        deployCodeTo("ParityPool.sol:ParityPool", constructorArgs, flags);
-        hook = ParityPool(flags);
+        deployCodeTo("RebasingParityHook.sol:RebasingParityHook", constructorArgs, flags);
+        hook = RebasingParityHook(flags);
 
         key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
         manager.initialize(key, SQRT_PRICE_1_1);

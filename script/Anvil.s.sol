@@ -14,7 +14,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {Constants} from "v4-core/src/../test/utils/Constants.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {ParityPool} from "../src/ParityPool.sol";
+import {RebasingParityHook} from "../src/RebasingParityHook.sol";
 import {StETH} from "../src/StETH.sol";
 import {HookMiner} from "v4-periphery/src/utils/HookMiner.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
@@ -26,7 +26,7 @@ import {IPositionDescriptor} from "v4-periphery/src/interfaces/IPositionDescript
 import {IWETH9} from "v4-periphery/src/interfaces/external/IWETH9.sol";
 
 /// @notice Forge script for deploying v4 & hooks to **anvil**
-contract ParityPoolScript is Script, DeployPermit2 {
+contract RebasingParityHookScript is Script, DeployPermit2 {
     using EasyPosm for IPositionManager;
 
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
@@ -51,14 +51,14 @@ contract ParityPoolScript is Script, DeployPermit2 {
         // Mine a salt that will produce a hook address with the correct permissions
         address treasury = address(0x999); // Default treasury for script
         (address hookAddress, bytes32 salt) =
-            HookMiner.find(CREATE2_DEPLOYER, permissions, type(ParityPool).creationCode, abi.encode(address(manager), treasury));
+            HookMiner.find(CREATE2_DEPLOYER, permissions, type(RebasingParityHook).creationCode, abi.encode(address(manager), treasury));
 
         // ----------------------------- //
         // Deploy the hook using CREATE2 //
         // ----------------------------- //
         vm.broadcast();
-        ParityPool parityPool = new ParityPool{salt: salt}(manager, treasury);
-        require(address(parityPool) == hookAddress, "ParityPoolScript: hook address mismatch");
+        RebasingParityHook rebasingParityHook = new RebasingParityHook{salt: salt}(manager, treasury);
+        require(address(rebasingParityHook) == hookAddress, "RebasingParityHookScript: hook address mismatch");
 
         // Additional helpers for interacting with the pool
         vm.startBroadcast();
@@ -68,7 +68,7 @@ contract ParityPoolScript is Script, DeployPermit2 {
 
         // test the lifecycle (create pool, add liquidity, swap)
         vm.startBroadcast();
-        testLifecycle(address(parityPool));
+        testLifecycle(address(rebasingParityHook));
         vm.stopBroadcast();
     }
 

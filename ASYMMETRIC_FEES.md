@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ParityPool hook now implements **asymmetric fees** to incentivize rebalancing trades and discourage pool drainage. This creates economic pressure to maintain the pool's 1:1 ratio while still allowing free-market arbitrage.
+The RebasingParityHook now implements **asymmetric fees** to incentivize rebalancing trades and discourage pool drainage. This creates economic pressure to maintain the pool's 1:1 ratio while still allowing free-market arbitrage.
 
 ## Fee Structure
 

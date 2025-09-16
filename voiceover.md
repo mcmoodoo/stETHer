@@ -12,7 +12,7 @@ Regular constant product AMM is not a good choice here, because for assets like 
 
 "So I built this using x plus y equals k instead. Let me show you the core hook implementation... Here's the parity logic that enables perfect 1:1 swaps when the pool is balanced. No bonding curve, no slippage - just direct swaps at fair prices."
 
-_[Show ParityPool.sol, point to parity math]_
+_[Show RebasingParityHook.sol, point to parity math]_
 
 ## Dynamic Fee System (0:50 - 1:10)
 

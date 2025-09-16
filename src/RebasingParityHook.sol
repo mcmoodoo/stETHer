@@ -15,7 +15,7 @@ import {SafeCast} from "v4-core/src/libraries/SafeCast.sol";
 import {ParityLP} from "./ParityLP.sol";
 import {ProtocolRevenue} from "./ProtocolRevenue.sol";
 
-contract ParityPool is BaseHook, SafeCallback {
+contract RebasingParityHook is BaseHook, SafeCallback {
     using SafeCast for uint256;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;

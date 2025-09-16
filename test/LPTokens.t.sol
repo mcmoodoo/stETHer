@@ -8,12 +8,12 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {ParityPool} from "../src/ParityPool.sol";
+import {RebasingParityHook} from "../src/RebasingParityHook.sol";
 import {ParityLP} from "../src/ParityLP.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
 contract LPTokensTest is Test, Fixtures {
-    ParityPool hook;
+    RebasingParityHook hook;
     ParityLP lpToken;
 
     function setUp() public {
@@ -26,8 +26,8 @@ contract LPTokensTest is Test, Fixtures {
                 ^ (0x4448 << 144)
         );
         bytes memory constructorArgs = abi.encode(manager, address(0x999)); // treasury address
-        deployCodeTo("ParityPool.sol:ParityPool", constructorArgs, flags);
-        hook = ParityPool(flags);
+        deployCodeTo("RebasingParityHook.sol:RebasingParityHook", constructorArgs, flags);
+        hook = RebasingParityHook(flags);
         lpToken = hook.LP_TOKEN();
 
         key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
