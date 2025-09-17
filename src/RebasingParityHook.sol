@@ -20,6 +20,45 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
 
+    // ============ Constants ============
+
+    /// @notice Fee calculation constants
+    uint256 private constant FEE_DIVISOR = 1_000_000;
+    uint256 private constant RATIO_SCALE = 1000;
+
+    /// @notice Dynamic fee thresholds (in basis points)
+    uint24 private constant MAX_PROTECTION_FEE = 50000;  // 5%
+    uint24 private constant HIGH_IMBALANCE_FEE = 20000;  // 2%
+    uint24 private constant MODERATE_IMBALANCE_FEE = 5000;  // 0.5%
+    uint24 private constant SLIGHT_IMBALANCE_FEE = 2000;  // 0.2%
+    uint24 private constant BASE_FEE = 1000;  // 0.1%
+
+    /// @notice Incentive rate thresholds (in basis points)
+    uint256 private constant CRITICAL_INCENTIVE_RATE = 1000;  // 0.1%
+    uint256 private constant HIGH_INCENTIVE_RATE = 500;  // 0.05%
+    uint256 private constant MODERATE_INCENTIVE_RATE = 200;  // 0.02%
+    uint256 private constant SLIGHT_INCENTIVE_RATE = 100;  // 0.01%
+
+    /// @notice Imbalance ratio thresholds (scaled by 1000)
+    uint256 private constant CRITICAL_IMBALANCE_RATIO = 2000;  // 2:1
+    uint256 private constant HIGH_IMBALANCE_RATIO = 1500;  // 1.5:1
+    uint256 private constant MODERATE_IMBALANCE_RATIO = 1200;  // 1.2:1
+    uint256 private constant SLIGHT_IMBALANCE_RATIO = 1100;  // 1.1:1
+
+    /// @notice Fee precision for LP token calculations
+    uint256 private constant LP_FEE_PRECISION = 1e18;
+
+    // ============ Structs ============
+
+    /// @notice Pool state data with calculated ratio
+    struct PoolState {
+        uint256 ethBalance;
+        uint256 stethBalance;
+        uint256 ratio;  // stETH/ETH ratio scaled by RATIO_SCALE
+    }
+
+    // ============ Immutable State ============
+
     /// @notice LP token for this pool
     ParityLP public immutable LP_TOKEN;
 
@@ -108,7 +147,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
             uint256 totalLPSupply = LP_TOKEN.totalSupply();
             if (newYield > 0 && totalLPSupply > 0) {
-                feesPerLpToken1 += (newYield * 1e18) / totalLPSupply;
+                feesPerLpToken1 += (newYield * LP_FEE_PRECISION) / totalLPSupply;
                 accumulatedFees1 += newYield;
                 poolStETHBalance = poolStETHPrincipal + hookTotalYield; // Update accounting
 
@@ -195,7 +234,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
                 (outputAmount, incentiveAmount) = _calculateIncentivizedOutput(key, inputAmount);
             } else if (dynamicFee > 0) {
                 // stETH → ETH: Apply dynamic fees
-                uint256 feeAmount = (inputAmount * dynamicFee) / 1_000_000;
+                uint256 feeAmount = (inputAmount * dynamicFee) / FEE_DIVISOR;
                 outputAmount = inputAmount - feeAmount;
                 feeAmount1 = feeAmount;
             } else {
@@ -207,7 +246,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
             if (params.zeroForOne) {
                 inputAmount = outputAmount; // 1:1 for exact output ETH → stETH
             } else if (dynamicFee > 0) {
-                inputAmount = (outputAmount * 1_000_000) / (1_000_000 - dynamicFee);
+                inputAmount = (outputAmount * FEE_DIVISOR) / (FEE_DIVISOR - dynamicFee);
                 feeAmount1 = inputAmount - outputAmount;
             } else {
                 inputAmount = outputAmount;
@@ -217,21 +256,22 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
     /// @notice Calculate dynamic fee based on pool imbalance for stETH → ETH swaps
     function _calculateDynamicFee(PoolKey calldata key) internal view returns (uint24) {
-        uint256 ethBalance = poolManager.balanceOf(address(this), key.currency0.toId());
-        uint256 stethBalance = poolManager.balanceOf(address(this), key.currency1.toId());
-        
-        if (ethBalance == 0) {
-            return 50000; // 5% maximum protection fee
+        PoolState memory state = _getPoolState(key);
+
+        if (state.ethBalance == 0) {
+            return MAX_PROTECTION_FEE;
         }
-        
-        // Calculate imbalance ratio: stETH / ETH (scaled by 1000 for precision)
-        uint256 ratio = (stethBalance * 1000) / ethBalance;
-        
-        if (ratio >= 2000) return 50000; // 5% - Critical imbalance
-        if (ratio >= 1500) return 20000; // 2% - High imbalance  
-        if (ratio >= 1200) return 5000;  // 0.5% - Moderate imbalance
-        if (ratio >= 1100) return 2000;  // 0.2% - Slight imbalance
-        return 1000; // 0.1% - Base fee
+
+        return _getFeeByRatio(state.ratio);
+    }
+
+    /// @notice Get fee tier based on imbalance ratio
+    function _getFeeByRatio(uint256 ratio) internal pure returns (uint24) {
+        if (ratio >= CRITICAL_IMBALANCE_RATIO) return MAX_PROTECTION_FEE;
+        if (ratio >= HIGH_IMBALANCE_RATIO) return HIGH_IMBALANCE_FEE;
+        if (ratio >= MODERATE_IMBALANCE_RATIO) return MODERATE_IMBALANCE_FEE;
+        if (ratio >= SLIGHT_IMBALANCE_RATIO) return SLIGHT_IMBALANCE_FEE;
+        return BASE_FEE;
     }
 
     /// @notice Calculate incentivized output for ETH → stETH swaps using protocol fees
@@ -246,7 +286,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
             return (inputAmount, 0);
         }
         
-        uint256 maxIncentive = (inputAmount * maxIncentiveRate) / 1_000_000;
+        uint256 maxIncentive = (inputAmount * maxIncentiveRate) / FEE_DIVISOR;
         
         // Check available protocol fees for incentives
         uint256 availableProtocolFees = PROTOCOL_REVENUE.getProtocolFees(Currency.unwrap(key.currency1));
@@ -266,22 +306,37 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
     /// @notice Calculate maximum incentive rate based on pool imbalance for ETH → stETH
     function _calculateMaxIncentiveRate(PoolKey calldata key) internal view returns (uint256) {
+        PoolState memory state = _getPoolState(key);
+
+        if (state.ethBalance == 0) {
+            return CRITICAL_INCENTIVE_RATE;
+        }
+
+        return _getIncentiveByRatio(state.ratio);
+    }
+
+    /// @notice Get incentive rate based on imbalance ratio
+    function _getIncentiveByRatio(uint256 ratio) internal pure returns (uint256) {
+        if (ratio >= CRITICAL_IMBALANCE_RATIO) return CRITICAL_INCENTIVE_RATE;
+        if (ratio >= HIGH_IMBALANCE_RATIO) return HIGH_INCENTIVE_RATE;
+        if (ratio >= MODERATE_IMBALANCE_RATIO) return MODERATE_INCENTIVE_RATE;
+        if (ratio >= SLIGHT_IMBALANCE_RATIO) return SLIGHT_INCENTIVE_RATE;
+        return 0; // No incentive when balanced or ETH-heavy
+    }
+
+    /// @notice Get current pool state with calculated ratio
+    function _getPoolState(PoolKey calldata key) internal view returns (PoolState memory) {
         uint256 ethBalance = poolManager.balanceOf(address(this), key.currency0.toId());
         uint256 stethBalance = poolManager.balanceOf(address(this), key.currency1.toId());
-        
+        uint256 ratio;
+
         if (ethBalance == 0) {
-            return 1000; // 0.1% max incentive when no ETH (critical need)
+            ratio = type(uint256).max; // Extreme imbalance
+        } else {
+            ratio = (stethBalance * RATIO_SCALE) / ethBalance;
         }
-        
-        // Calculate imbalance ratio: stETH / ETH (scaled by 1000 for precision)
-        uint256 ratio = (stethBalance * 1000) / ethBalance;
-        
-        // Higher ratio = more stETH relative to ETH = higher incentive needed to attract ETH
-        if (ratio >= 2000) return 1000; // 0.1% - Critical need for ETH
-        if (ratio >= 1500) return 500;  // 0.05% - High need for ETH
-        if (ratio >= 1200) return 200;  // 0.02% - Moderate need
-        if (ratio >= 1100) return 100;  // 0.01% - Slight need
-        return 0; // No incentive when balanced or ETH-heavy
+
+        return PoolState(ethBalance, stethBalance, ratio);
     }
 
     /// @notice Pay incentive from protocol fees to encourage ETH → stETH swaps
@@ -439,8 +494,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         uint256 amount1 = (lpTokenAmount * poolStETHBalance) / totalLpSupply;
 
         // Add accumulated fees to withdrawal
-        uint256 fees0 = (lpTokenAmount * (feesPerLpToken0 - claimedFeesPerLpToken0[user])) / 1e18;
-        uint256 fees1 = (lpTokenAmount * (feesPerLpToken1 - claimedFeesPerLpToken1[user])) / 1e18;
+        uint256 fees0 = (lpTokenAmount * (feesPerLpToken0 - claimedFeesPerLpToken0[user])) / LP_FEE_PRECISION;
+        uint256 fees1 = (lpTokenAmount * (feesPerLpToken1 - claimedFeesPerLpToken1[user])) / LP_FEE_PRECISION;
         
         amount0 += fees0;
         amount1 += fees1;
@@ -505,7 +560,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
             // Update fees per LP token if there are LP tokens outstanding
             uint256 totalSupply = LP_TOKEN.totalSupply();
             if (totalSupply > 0) {
-                feesPerLpToken0 += (feeAmount0 * 1e18) / totalSupply;
+                feesPerLpToken0 += (feeAmount0 * LP_FEE_PRECISION) / totalSupply;
             }
         }
         
@@ -515,7 +570,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
             // Update fees per LP token if there are LP tokens outstanding
             uint256 totalSupply = LP_TOKEN.totalSupply();
             if (totalSupply > 0) {
-                feesPerLpToken1 += (feeAmount1 * 1e18) / totalSupply;
+                feesPerLpToken1 += (feeAmount1 * LP_FEE_PRECISION) / totalSupply;
             }
         }
     }
@@ -525,8 +580,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         uint256 lpBalance = LP_TOKEN.balanceOf(lp);
         if (lpBalance == 0) return (0, 0);
         
-        fees0 = (lpBalance * (feesPerLpToken0 - claimedFeesPerLpToken0[lp])) / 1e18;
-        fees1 = (lpBalance * (feesPerLpToken1 - claimedFeesPerLpToken1[lp])) / 1e18;
+        fees0 = (lpBalance * (feesPerLpToken0 - claimedFeesPerLpToken0[lp])) / LP_FEE_PRECISION;
+        fees1 = (lpBalance * (feesPerLpToken1 - claimedFeesPerLpToken1[lp])) / LP_FEE_PRECISION;
     }
 
     /// @notice Claim accumulated fees for an LP
@@ -540,8 +595,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         require(lpBalance > 0, "No LP tokens");
         
         // Calculate pending fees
-        fees0 = (lpBalance * (feesPerLpToken0 - claimedFeesPerLpToken0[msg.sender])) / 1e18;
-        fees1 = (lpBalance * (feesPerLpToken1 - claimedFeesPerLpToken1[msg.sender])) / 1e18;
+        fees0 = (lpBalance * (feesPerLpToken0 - claimedFeesPerLpToken0[msg.sender])) / LP_FEE_PRECISION;
+        fees1 = (lpBalance * (feesPerLpToken1 - claimedFeesPerLpToken1[msg.sender])) / LP_FEE_PRECISION;
         
         if (fees0 > 0 || fees1 > 0) {
             bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, fees0, fees1, 2)); // 2 = claim fees
