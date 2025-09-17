@@ -48,6 +48,11 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     /// @notice Fee precision for LP token calculations
     uint256 private constant LP_FEE_PRECISION = 1e18;
 
+    /// @notice Operation type constants for unlock callback routing
+    uint8 private constant OP_ADD_LIQUIDITY = 1;
+    uint8 private constant OP_REMOVE_LIQUIDITY = 2;
+    uint8 private constant OP_CLAIM_FEES = 3;
+
     // ============ Structs ============
 
     /// @notice Pool state data with calculated ratio
@@ -381,7 +386,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         syncRebaseYield(key.currency1)
         returns (uint256 lpTokens)
     {
-        bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, amountPerToken, true));
+        bytes memory data = abi.encodePacked(OP_ADD_LIQUIDITY, abi.encode(msg.sender, key.currency0, key.currency1, amountPerToken));
+        bytes memory result = poolManager.unlock(data);
         lpTokens = abi.decode(result, (uint256));
         return lpTokens;
     }
@@ -399,7 +405,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     {
         require(LP_TOKEN.balanceOf(msg.sender) >= lpTokenAmount, "Insufficient LP tokens");
         
-        bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, lpTokenAmount, false));
+        bytes memory data = abi.encodePacked(OP_REMOVE_LIQUIDITY, abi.encode(msg.sender, key.currency0, key.currency1, lpTokenAmount));
+        bytes memory result = poolManager.unlock(data);
         uint256 packedAmounts = abi.decode(result, (uint256));
         amount0 = packedAmounts >> 128;
         amount1 = packedAmounts & type(uint128).max;
@@ -409,33 +416,25 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
     function _unlockCallback(bytes calldata data) internal virtual override returns (bytes memory) {
         require(msg.sender == address(poolManager), "Not pool manager");
+        require(data.length > 0, "Empty data");
 
-        // Try to decode with operation type
-        uint256 operation;
-        if (data.length > 160) { // Check if data includes operation type
-            (, , , , , operation) = abi.decode(data, (address, Currency, Currency, uint256, uint256, uint256));
-        }
+        uint8 opType = uint8(data[0]);
+        bytes calldata operationData = data[1:];
 
-        if (operation == 2) {
-            // Claim fees operation
-            (address user, Currency currency0, Currency currency1, uint256 fees0, uint256 fees1, ) =
-                abi.decode(data, (address, Currency, Currency, uint256, uint256, uint256));
-            return _claimFeesCallback(user, currency0, currency1, fees0, fees1);
+        if (opType == OP_ADD_LIQUIDITY) {
+            return _addLiquidityCallback(operationData);
+        } else if (opType == OP_REMOVE_LIQUIDITY) {
+            return _removeLiquidityCallback(operationData);
+        } else if (opType == OP_CLAIM_FEES) {
+            return _claimFeesCallback(operationData);
         } else {
-            // Legacy add/remove liquidity operations
-            (address user, Currency currency0, Currency currency1, uint256 amount, bool isAddLiquidity) =
-                abi.decode(data, (address, Currency, Currency, uint256, bool));
-
-            if (isAddLiquidity) {
-                return _addLiquidityCallback(user, currency0, currency1, amount);
-            } else {
-                return _removeLiquidityCallback(user, currency0, currency1, amount);
-            }
+            revert("Invalid operation type");
         }
     }
 
-    function _addLiquidityCallback(address payer, Currency currency0, Currency currency1, uint256 amountPerToken) 
-        internal returns (bytes memory) {
+    function _addLiquidityCallback(bytes calldata data) internal returns (bytes memory) {
+        (address payer, Currency currency0, Currency currency1, uint256 amountPerToken) =
+            abi.decode(data, (address, Currency, Currency, uint256));
         
         // Handle currency0
         if (currency0.isAddressZero()) {
@@ -483,8 +482,9 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         return abi.encode(lpTokensToMint);
     }
 
-    function _removeLiquidityCallback(address user, Currency currency0, Currency currency1, uint256 lpTokenAmount)
-        internal returns (bytes memory) {
+    function _removeLiquidityCallback(bytes calldata data) internal returns (bytes memory) {
+        (address user, Currency currency0, Currency currency1, uint256 lpTokenAmount) =
+            abi.decode(data, (address, Currency, Currency, uint256));
         
         // Calculate what to remove BEFORE burning tokens (to avoid division by zero)
         uint256 totalLpSupply = LP_TOKEN.totalSupply();
@@ -599,7 +599,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         fees1 = (lpBalance * (feesPerLpToken1 - claimedFeesPerLpToken1[msg.sender])) / LP_FEE_PRECISION;
         
         if (fees0 > 0 || fees1 > 0) {
-            bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, fees0, fees1, 2)); // 2 = claim fees
+            bytes memory data = abi.encodePacked(OP_CLAIM_FEES, abi.encode(msg.sender, key.currency0, key.currency1, fees0, fees1));
+            bytes memory result = poolManager.unlock(data);
             (uint256 claimed0, uint256 claimed1) = abi.decode(result, (uint256, uint256));
             return (claimed0, claimed1);
         }
@@ -607,8 +608,9 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         return (0, 0);
     }
 
-    function _claimFeesCallback(address user, Currency currency0, Currency currency1, uint256 fees0, uint256 fees1)
-        internal returns (bytes memory) {
+    function _claimFeesCallback(bytes calldata data) internal returns (bytes memory) {
+        (address user, Currency currency0, Currency currency1, uint256 fees0, uint256 fees1) =
+            abi.decode(data, (address, Currency, Currency, uint256, uint256));
         
         // Update claimed fees tracking
         claimedFeesPerLpToken0[user] = feesPerLpToken0;
