@@ -29,6 +29,7 @@ contract ProtocolRevenue {
     }
     
     constructor(address _treasury) {
+        require(_treasury != address(0), "Treasury cannot be zero address");
         OWNER = msg.sender;
         treasury = _treasury;
     }
@@ -88,6 +89,7 @@ contract ProtocolRevenue {
     
     /// @notice Update treasury address
     function updateTreasury(address _treasury) external onlyOwner {
+        require(_treasury != address(0), "Treasury cannot be zero address");
         treasury = _treasury;
     }
     

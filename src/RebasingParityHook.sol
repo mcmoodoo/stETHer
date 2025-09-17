@@ -393,7 +393,10 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     function _addLiquidityCallback(bytes calldata data) internal returns (bytes memory) {
         (address payer, Currency currency0, Currency currency1, uint256 amountPerToken) =
             abi.decode(data, (address, Currency, Currency, uint256));
-        
+
+        // Security: payer comes from addLiquidity() which encodes msg.sender
+        // This is safe because _unlockCallback is only called by poolManager during unlock
+
         // Handle currency0
         if (currency0.isAddressZero()) {
             poolManager.settle{value: amountPerToken}();
@@ -493,6 +496,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     }
 
     // ============ SECTION 6: FEE & YIELD MANAGEMENT ============
+    // Note: Reentrancy protection is provided by SafeCallback and poolManager.unlock()
 
     /// @notice Distribute stETH rebasing yield to LPs as accumulated fees
     /// @param stETHCurrency The stETH currency to check for rebasing

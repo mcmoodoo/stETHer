@@ -14,6 +14,7 @@ contract ParityLP is ERC20 {
     }
     
     constructor(address _hook) ERC20("Parity LP", "PLP", 18) {
+        require(_hook != address(0), "Hook cannot be zero address");
         HOOK = _hook;
     }
     
