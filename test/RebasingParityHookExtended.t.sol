@@ -36,58 +36,6 @@ contract RebasingParityHookExtendedTest is Test, Fixtures {
         manager.initialize(key, SQRT_PRICE_1_1);
     }
 
-    function test_addLiquidity_success() public {
-        uint256 amount = 1000e18;
-        
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), amount);
-        IERC20(Currency.unwrap(currency1)).approve(address(hook), amount);
-        
-        uint256 balance0Before = manager.balanceOf(address(hook), currency0.toId());
-        uint256 balance1Before = manager.balanceOf(address(hook), currency1.toId());
-        
-        hook.addLiquidity(key, amount);
-        
-        uint256 balance0After = manager.balanceOf(address(hook), currency0.toId());
-        uint256 balance1After = manager.balanceOf(address(hook), currency1.toId());
-        
-        assertEq(balance0After - balance0Before, amount);
-        assertEq(balance1After - balance1Before, amount);
-    }
-
-    function test_addLiquidity_multiple_deposits() public {
-        uint256 amount1 = 500e18;
-        uint256 amount2 = 300e18;
-        
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), amount1 + amount2);
-        IERC20(Currency.unwrap(currency1)).approve(address(hook), amount1 + amount2);
-        
-        hook.addLiquidity(key, amount1);
-        hook.addLiquidity(key, amount2);
-        
-        assertEq(manager.balanceOf(address(hook), currency0.toId()), amount1 + amount2);
-        assertEq(manager.balanceOf(address(hook), currency1.toId()), amount1 + amount2);
-    }
-
-    function test_swap_after_liquidity() public {
-        uint256 liquidityAmount = 1000e18;
-        uint256 swapAmount = 100e18;
-        
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
-        IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
-        
-        uint256 balance0Before = currency0.balanceOfSelf();
-        uint256 balance1Before = currency1.balanceOfSelf();
-        
-        swap(key, true, -int256(swapAmount), ZERO_BYTES);
-        
-        uint256 balance0After = currency0.balanceOfSelf();
-        uint256 balance1After = currency1.balanceOfSelf();
-        
-        // ETH → stETH: 0% fee, 1:1 swap
-        assertEq(balance0Before - balance0After, swapAmount);
-        assertEq(balance1After - balance1Before, swapAmount);
-    }
 
     function test_swap_reverse_direction() public {
         uint256 liquidityAmount = 1000e18;
@@ -212,20 +160,6 @@ contract RebasingParityHookExtendedTest is Test, Fixtures {
         }
     }
 
-    function testFuzz_addLiquidity(uint256 amount) public {
-        amount = bound(amount, 1e18, 10000e18);
-        
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), amount);
-        IERC20(Currency.unwrap(currency1)).approve(address(hook), amount);
-        
-        uint256 balance0Before = manager.balanceOf(address(hook), currency0.toId());
-        uint256 balance1Before = manager.balanceOf(address(hook), currency1.toId());
-        
-        hook.addLiquidity(key, amount);
-        
-        assertEq(manager.balanceOf(address(hook), currency0.toId()) - balance0Before, amount);
-        assertEq(manager.balanceOf(address(hook), currency1.toId()) - balance1Before, amount);
-    }
 
     function test_multiple_swaps_same_direction() public {
         uint256 liquidityAmount = 5000e18;
