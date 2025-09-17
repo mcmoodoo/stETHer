@@ -8,7 +8,7 @@ import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {SafeCast} from "v4-core/src/libraries/SafeCast.sol";
@@ -22,9 +22,13 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
     /// @notice LP token for this pool
     ParityLP public immutable LP_TOKEN;
-    
+
     /// @notice Protocol revenue management
     ProtocolRevenue public immutable PROTOCOL_REVENUE;
+
+    /// @notice The only pool this hook is allowed to manage
+    PoolId public allowedPoolId;
+    bool public poolSet;
     
     /// @notice Track individual token balances in the pool
     uint256 public poolETHBalance;      // ETH balance in pool
@@ -54,6 +58,18 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
     function _poolManager() internal view override returns (IPoolManager) {
         return poolManager;
+    }
+
+    /// @notice Modifier to ensure only the allowed pool can use this hook
+    modifier onlyAllowedPool(PoolKey calldata key) {
+        if (!poolSet) {
+            // First use sets the allowed pool
+            allowedPoolId = key.toId();
+            poolSet = true;
+        } else {
+            require(PoolId.unwrap(key.toId()) == PoolId.unwrap(allowedPoolId), "Hook: wrong pool");
+        }
+        _;
     }
 
     /// @notice Modifier to automatically sync rebase yield before major operations
@@ -130,6 +146,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         internal
         override
+        onlyAllowedPool(key)
         syncRebaseYield(key.currency1)
         returns (bytes4, BeforeSwapDelta, uint24)
     {
@@ -292,10 +309,10 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     }
 
     /// @notice No liquidity will be managed by v4 PoolManager
-    function _beforeAddLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
+    function _beforeAddLiquidity(address, PoolKey calldata key, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
         internal
-        pure
         override
+        onlyAllowedPool(key)
         returns (bytes4)
     {
         revert("No v4 Liquidity allowed");
@@ -308,7 +325,13 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     /// @param key PoolKey of the pool to add liquidity to
     /// @param amountPerToken The amount of each token to be added as liquidity
     /// @return lpTokens Amount of LP tokens minted to the liquidity provider
-    function addLiquidity(PoolKey calldata key, uint256 amountPerToken) external payable syncRebaseYield(key.currency1) returns (uint256 lpTokens) {
+    function addLiquidity(PoolKey calldata key, uint256 amountPerToken)
+        external
+        payable
+        onlyAllowedPool(key)
+        syncRebaseYield(key.currency1)
+        returns (uint256 lpTokens)
+    {
         bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, amountPerToken, true));
         lpTokens = abi.decode(result, (uint256));
         return lpTokens;
@@ -319,7 +342,12 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     /// @param lpTokenAmount Amount of LP tokens to burn
     /// @return amount0 Amount of currency0 returned
     /// @return amount1 Amount of currency1 returned
-    function removeLiquidity(PoolKey calldata key, uint256 lpTokenAmount) external syncRebaseYield(key.currency1) returns (uint256 amount0, uint256 amount1) {
+    function removeLiquidity(PoolKey calldata key, uint256 lpTokenAmount)
+        external
+        onlyAllowedPool(key)
+        syncRebaseYield(key.currency1)
+        returns (uint256 amount0, uint256 amount1)
+    {
         require(LP_TOKEN.balanceOf(msg.sender) >= lpTokenAmount, "Insufficient LP tokens");
         
         bytes memory result = poolManager.unlock(abi.encode(msg.sender, key.currency0, key.currency1, lpTokenAmount, false));
@@ -508,7 +536,12 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     }
 
     /// @notice Claim accumulated fees for an LP
-    function claimFees(PoolKey calldata key) external syncRebaseYield(key.currency1) returns (uint256 fees0, uint256 fees1) {
+    function claimFees(PoolKey calldata key)
+        external
+        onlyAllowedPool(key)
+        syncRebaseYield(key.currency1)
+        returns (uint256 fees0, uint256 fees1)
+    {
         uint256 lpBalance = LP_TOKEN.balanceOf(msg.sender);
         require(lpBalance > 0, "No LP tokens");
         
@@ -567,5 +600,15 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     /// @notice Get the protocol revenue contract address
     function getProtocolRevenue() external view returns (address) {
         return address(PROTOCOL_REVENUE);
+    }
+
+    /// @notice Get the allowed pool ID for this hook
+    function getAllowedPoolId() external view returns (PoolId) {
+        return allowedPoolId;
+    }
+
+    /// @notice Check if this hook has been bound to a pool
+    function isPoolSet() external view returns (bool) {
+        return poolSet;
     }
 }
