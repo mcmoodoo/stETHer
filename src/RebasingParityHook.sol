@@ -27,8 +27,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     ProtocolRevenue public immutable PROTOCOL_REVENUE;
 
     /// @notice The only pool this hook is allowed to manage
-    PoolId public allowedPoolId;
-    bool public poolSet;
+    PoolId public immutable allowedPoolId;
     
     /// @notice Track individual token balances in the pool
     uint256 public poolETHBalance;      // ETH balance in pool
@@ -51,9 +50,10 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     event RebaseYieldDistributed(uint256 yieldAmount, uint256 timestamp);
     event PoolBalancesUpdated(uint256 ethBalance, uint256 stethBalance);
 
-    constructor(IPoolManager poolManager_, address treasury) SafeCallback(poolManager_) {
+    constructor(IPoolManager poolManager_, address treasury, PoolKey memory allowedPoolKey) SafeCallback(poolManager_) {
         LP_TOKEN = new ParityLP(address(this));
         PROTOCOL_REVENUE = new ProtocolRevenue(treasury);
+        allowedPoolId = allowedPoolKey.toId();
     }
 
     function _poolManager() internal view override returns (IPoolManager) {
@@ -62,13 +62,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
 
     /// @notice Modifier to ensure only the allowed pool can use this hook
     modifier onlyAllowedPool(PoolKey calldata key) {
-        if (!poolSet) {
-            // First use sets the allowed pool
-            allowedPoolId = key.toId();
-            poolSet = true;
-        } else {
-            require(PoolId.unwrap(key.toId()) == PoolId.unwrap(allowedPoolId), "Hook: wrong pool");
-        }
+        require(PoolId.unwrap(key.toId()) == PoolId.unwrap(allowedPoolId), "Hook: wrong pool");
         _;
     }
 
@@ -605,10 +599,5 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     /// @notice Get the allowed pool ID for this hook
     function getAllowedPoolId() external view returns (PoolId) {
         return allowedPoolId;
-    }
-
-    /// @notice Check if this hook has been bound to a pool
-    function isPoolSet() external view returns (bool) {
-        return poolSet;
     }
 }

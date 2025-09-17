@@ -31,12 +31,14 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
             uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG)
                 ^ (0x4448 << 144)
         );
-        bytes memory constructorArgs = abi.encode(manager, address(0x999)); // treasury address
+        // Create the pool key first (before deploying hook)
+        key = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
+
+        bytes memory constructorArgs = abi.encode(manager, address(0x999), key); // treasury address
         deployCodeTo("RebasingParityHook.sol:RebasingParityHook", constructorArgs, flags);
+
         hook = RebasingParityHook(flags);
         lpToken = hook.LP_TOKEN();
-
-        key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
         manager.initialize(key, SQRT_PRICE_1_1);
 
         // Mint some stETH for testing

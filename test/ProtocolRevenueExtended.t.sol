@@ -50,7 +50,11 @@ contract ProtocolRevenueExtendedTest is Test, Fixtures {
             uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG)
                 ^ (0x4449 << 144)
         );
-        bytes memory constructorArgs = abi.encode(manager, treasury);
+
+        // Create the pool key first (before deploying hook)
+        key = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
+
+        bytes memory constructorArgs = abi.encode(manager, treasury, key);
         deployCodeTo("RebasingParityHook.sol:RebasingParityHook", constructorArgs, flags);
         hook = RebasingParityHook(flags);
 

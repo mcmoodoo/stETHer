@@ -50,14 +50,27 @@ contract RebasingParityHookScript is Script, DeployPermit2 {
 
         // Mine a salt that will produce a hook address with the correct permissions
         address treasury = address(0x999); // Default treasury for script
+
+        // Create a dummy pool key for the script (ETH/stETH, 0.3% fee, 60 tick spacing)
+        PoolKey memory poolKey = PoolKey(
+            Currency.wrap(address(0)), // ETH
+            Currency.wrap(address(0x888)), // Dummy stETH address
+            3000, // 0.3% fee
+            60, // tick spacing
+            IHooks(address(0)) // Will be set to actual hook address
+        );
+
         (address hookAddress, bytes32 salt) =
-            HookMiner.find(CREATE2_DEPLOYER, permissions, type(RebasingParityHook).creationCode, abi.encode(address(manager), treasury));
+            HookMiner.find(CREATE2_DEPLOYER, permissions, type(RebasingParityHook).creationCode, abi.encode(address(manager), treasury, poolKey));
+
+        // Update pool key with actual hook address
+        poolKey.hooks = IHooks(hookAddress);
 
         // ----------------------------- //
         // Deploy the hook using CREATE2 //
         // ----------------------------- //
         vm.broadcast();
-        RebasingParityHook rebasingParityHook = new RebasingParityHook{salt: salt}(manager, treasury);
+        RebasingParityHook rebasingParityHook = new RebasingParityHook{salt: salt}(manager, treasury, poolKey);
         require(address(rebasingParityHook) == hookAddress, "RebasingParityHookScript: hook address mismatch");
 
         // Additional helpers for interacting with the pool

@@ -4,6 +4,9 @@ pragma solidity ^0.8.19;
 import {Script} from "forge-std/Script.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
+import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 
 import {Constants} from "./base/Constants.sol";
 import {RebasingParityHook} from "../src/RebasingParityHook.sol";
@@ -22,13 +25,26 @@ contract RebasingParityHookScript is Script, Constants {
 
         // Mine a salt that will produce a hook address with the correct flags
         address treasury = address(0x999); // Default treasury for script
-        bytes memory constructorArgs = abi.encode(POOLMANAGER, treasury);
+
+        // Create a dummy pool key for the script (ETH/stETH, 0.3% fee, 60 tick spacing)
+        PoolKey memory poolKey = PoolKey(
+            Currency.wrap(address(0)), // ETH
+            Currency.wrap(address(0x888)), // Dummy stETH address
+            3000, // 0.3% fee
+            60, // tick spacing
+            IHooks(address(0)) // Will be set to actual hook address
+        );
+
+        bytes memory constructorArgs = abi.encode(POOLMANAGER, treasury, poolKey);
         (address hookAddress, bytes32 salt) =
             HookMiner.find(CREATE2_DEPLOYER, flags, type(RebasingParityHook).creationCode, constructorArgs);
 
+        // Update pool key with actual hook address
+        poolKey.hooks = IHooks(hookAddress);
+
         // Deploy the hook using CREATE2
         vm.broadcast();
-        RebasingParityHook rebasingParityHook = new RebasingParityHook{salt: salt}(IPoolManager(POOLMANAGER), treasury);
+        RebasingParityHook rebasingParityHook = new RebasingParityHook{salt: salt}(IPoolManager(POOLMANAGER), treasury, poolKey);
         require(address(rebasingParityHook) == hookAddress, "RebasingParityHookScript: hook address mismatch");
     }
 }
