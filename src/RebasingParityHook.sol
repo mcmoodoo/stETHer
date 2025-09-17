@@ -116,50 +116,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         _;
     }
 
-    /// @notice Distribute stETH rebasing yield to LPs as accumulated fees
-    /// @param stETHCurrency The stETH currency to check for rebasing
-    function _distributeRebaseYield(Currency stETHCurrency) private {
-        if (Currency.unwrap(stETHCurrency) == address(0)) return; // Skip for ETH
 
-        // Get hook's ERC6909 balance (this is the fixed claim amount)
-        uint256 hookERC6909Balance = poolManager.balanceOf(address(this), stETHCurrency.toId());
-
-        if (hookERC6909Balance == 0) return; // No tokens to rebase
-
-        // Get total actual stETH in the pool manager (including rebases)
-        uint256 totalStETHInPoolManager = IERC20(Currency.unwrap(stETHCurrency)).balanceOf(address(poolManager));
-
-        // Get total ERC6909 stETH balance across all hooks in the pool manager
-        uint256 totalERC6909Balance = poolManager.balanceOf(address(poolManager), stETHCurrency.toId());
-
-        // Calculate this hook's actual stETH value (proportional share of rebased total)
-        uint256 actualStETHValue;
-        if (totalERC6909Balance > 0) {
-            actualStETHValue = (hookERC6909Balance * totalStETHInPoolManager) / totalERC6909Balance;
-        } else {
-            // Fallback: if this is the only hook, our value equals the total
-            actualStETHValue = totalStETHInPoolManager;
-        }
-
-        // Calculate rebase yield for this hook only
-        if (actualStETHValue > poolStETHPrincipal) {
-            uint256 hookTotalYield = actualStETHValue - poolStETHPrincipal;
-
-            // Calculate undistributed yield (total yield minus what we've already distributed)
-            uint256 alreadyDistributed = accumulatedFees1; // All fees/yield distributed so far
-            uint256 newYield = hookTotalYield > alreadyDistributed ?
-                hookTotalYield - alreadyDistributed : 0;
-
-            uint256 totalLPSupply = LP_TOKEN.totalSupply();
-            if (newYield > 0 && totalLPSupply > 0) {
-                feesPerLpToken1 += (newYield * LP_FEE_PRECISION) / totalLPSupply;
-                accumulatedFees1 += newYield;
-                poolStETHBalance = poolStETHPrincipal + hookTotalYield; // Update accounting
-
-                emit RebaseYieldDistributed(newYield, block.timestamp);
-            }
-        }
-    }
+    // ============ SECTION 3: HOOK INTERFACE IMPLEMENTATIONS ============
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -180,6 +138,16 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         });
     }
 
+    /// @notice No liquidity will be managed by v4 PoolManager
+    function _beforeAddLiquidity(address, PoolKey calldata key, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
+        internal
+        override
+        onlyAllowedPool(key)
+        returns (bytes4)
+    {
+        revert("No v4 Liquidity allowed");
+    }
+
     /// @notice Parity swap via custom accounting, tokens are exchanged 1:1 with asymmetric fees
     function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         internal
@@ -190,6 +158,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     {
         return _processSwap(key, params);
     }
+
+    // ============ SECTION 4: SWAP PROCESSING ============
     
     /// @notice Process swap logic (extracted to avoid stack too deep)
     function _processSwap(PoolKey calldata key, IPoolManager.SwapParams calldata params)
@@ -362,19 +332,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         // The protocol fees have been deducted to account for this cost
     }
 
-    /// @notice No liquidity will be managed by v4 PoolManager
-    function _beforeAddLiquidity(address, PoolKey calldata key, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
-        internal
-        override
-        onlyAllowedPool(key)
-        returns (bytes4)
-    {
-        revert("No v4 Liquidity allowed");
-    }
-
-    // -----------------------------------------------
-    // Liquidity Functions, not production ready
-    // -----------------------------------------------
+    // ============ SECTION 5: LIQUIDITY MANAGEMENT ============
     /// @notice Add liquidity 1:1 for the parity curve
     /// @param key PoolKey of the pool to add liquidity to
     /// @param amountPerToken The amount of each token to be added as liquidity
@@ -534,12 +492,59 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         return abi.encode((uint256(amount0) << 128) | amount1);
     }
 
+    // ============ SECTION 6: FEE & YIELD MANAGEMENT ============
+
+    /// @notice Distribute stETH rebasing yield to LPs as accumulated fees
+    /// @param stETHCurrency The stETH currency to check for rebasing
+    function _distributeRebaseYield(Currency stETHCurrency) private {
+        if (Currency.unwrap(stETHCurrency) == address(0)) return; // Skip for ETH
+
+        // Get hook's ERC6909 balance (this is the fixed claim amount)
+        uint256 hookERC6909Balance = poolManager.balanceOf(address(this), stETHCurrency.toId());
+
+        if (hookERC6909Balance == 0) return; // No tokens to rebase
+
+        // Get total actual stETH in the pool manager (including rebases)
+        uint256 totalStETHInPoolManager = IERC20(Currency.unwrap(stETHCurrency)).balanceOf(address(poolManager));
+
+        // Get total ERC6909 stETH balance across all hooks in the pool manager
+        uint256 totalERC6909Balance = poolManager.balanceOf(address(poolManager), stETHCurrency.toId());
+
+        // Calculate this hook's actual stETH value (proportional share of rebased total)
+        uint256 actualStETHValue;
+        if (totalERC6909Balance > 0) {
+            actualStETHValue = (hookERC6909Balance * totalStETHInPoolManager) / totalERC6909Balance;
+        } else {
+            // Fallback: if this is the only hook, our value equals the total
+            actualStETHValue = totalStETHInPoolManager;
+        }
+
+        // Calculate rebase yield for this hook only
+        if (actualStETHValue > poolStETHPrincipal) {
+            uint256 hookTotalYield = actualStETHValue - poolStETHPrincipal;
+
+            // Calculate undistributed yield (total yield minus what we've already distributed)
+            uint256 alreadyDistributed = accumulatedFees1; // All fees/yield distributed so far
+            uint256 newYield = hookTotalYield > alreadyDistributed ?
+                hookTotalYield - alreadyDistributed : 0;
+
+            uint256 totalLPSupply = LP_TOKEN.totalSupply();
+            if (newYield > 0 && totalLPSupply > 0) {
+                feesPerLpToken1 += (newYield * LP_FEE_PRECISION) / totalLPSupply;
+                accumulatedFees1 += newYield;
+                poolStETHBalance = poolStETHPrincipal + hookTotalYield; // Update accounting
+
+                emit RebaseYieldDistributed(newYield, block.timestamp);
+            }
+        }
+    }
+
     /// @notice Split fees between protocol and LPs, then accumulate LP portion
     function _splitAndAccumulateFees(PoolKey calldata key, uint256 feeAmount0, uint256 feeAmount1, uint256 swapAmount) internal {
         // Calculate protocol fees using the ProtocolRevenue contract
         (uint256 protocolFee0, uint256 lpFee0) = PROTOCOL_REVENUE.calculateProtocolFee(feeAmount0, swapAmount);
         (uint256 protocolFee1, uint256 lpFee1) = PROTOCOL_REVENUE.calculateProtocolFee(feeAmount1, swapAmount);
-        
+
         // Accumulate protocol fees
         if (protocolFee0 > 0) {
             PROTOCOL_REVENUE.accumulateProtocolFee(Currency.unwrap(key.currency0), protocolFee0);
@@ -547,7 +552,7 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         if (protocolFee1 > 0) {
             PROTOCOL_REVENUE.accumulateProtocolFee(Currency.unwrap(key.currency1), protocolFee1);
         }
-        
+
         // Accumulate LP fees
         _accumulateLpFees(lpFee0, lpFee1);
     }
@@ -633,6 +638,8 @@ contract RebasingParityHook is BaseHook, SafeCallback {
         return abi.encode(fees0, fees1);
     }
 
+    // ============ SECTION 7: VIEW/GETTER FUNCTIONS ============
+
     /// @notice Get total accumulated fees (LP portion only)
     function getTotalAccumulatedFees() external view returns (uint256 fees0, uint256 fees1) {
         return (accumulatedFees0, accumulatedFees1);
@@ -642,12 +649,12 @@ contract RebasingParityHook is BaseHook, SafeCallback {
     function totalLiquidity() external view returns (uint256) {
         return poolETHBalance + poolStETHBalance;
     }
-    
+
     /// @notice Get protocol fees accumulated
     function getProtocolFees(address token) external view returns (uint256) {
         return PROTOCOL_REVENUE.getProtocolFees(token);
     }
-    
+
     /// @notice Get the protocol revenue contract address
     function getProtocolRevenue() external view returns (address) {
         return address(PROTOCOL_REVENUE);
