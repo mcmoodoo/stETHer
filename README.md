@@ -1,6 +1,6 @@
 # stETHer: Parity Pool AMM for ETH/stETH Trading
 
-🏆 **3rd Place Winner - Uniswap Foundation Prize at EthGlobal NYC 2025**
+🏆 **3rd Place Winner - Uniswap Foundation Prize at [EthGlobal NYC 2025](https://ethglobal.com/showcase/stether-b0moi)**
 
 A custom parity pool that enables direct 1:1 ETH/stETH swaps with zero slippage, dynamic asymmetric fees, and sustainable incentives.
 
