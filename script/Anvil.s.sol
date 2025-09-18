@@ -14,7 +14,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {Constants} from "v4-core/src/../test/utils/Constants.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {RebasingParityHook} from "../src/RebasingParityHook.sol";
+import {RebasingDirectPool} from "../src/RebasingDirectPool.sol";
 import {StETH} from "../src/StETH.sol";
 import {HookMiner} from "v4-periphery/src/utils/HookMiner.sol";
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
@@ -26,7 +26,7 @@ import {IPositionDescriptor} from "v4-periphery/src/interfaces/IPositionDescript
 import {IWETH9} from "v4-periphery/src/interfaces/external/IWETH9.sol";
 
 /// @notice Forge script for deploying v4 & hooks to **anvil**
-contract RebasingParityHookScript is Script, DeployPermit2 {
+contract RebasingDirectPoolScript is Script, DeployPermit2 {
     using EasyPosm for IPositionManager;
 
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
@@ -61,7 +61,7 @@ contract RebasingParityHookScript is Script, DeployPermit2 {
         );
 
         (address hookAddress, bytes32 salt) =
-            HookMiner.find(CREATE2_DEPLOYER, permissions, type(RebasingParityHook).creationCode, abi.encode(address(manager), treasury, poolKey));
+            HookMiner.find(CREATE2_DEPLOYER, permissions, type(RebasingDirectPool).creationCode, abi.encode(address(manager), treasury, poolKey));
 
         // Update pool key with actual hook address
         poolKey.hooks = IHooks(hookAddress);
@@ -70,8 +70,8 @@ contract RebasingParityHookScript is Script, DeployPermit2 {
         // Deploy the hook using CREATE2 //
         // ----------------------------- //
         vm.broadcast();
-        RebasingParityHook rebasingParityHook = new RebasingParityHook{salt: salt}(manager, treasury, poolKey);
-        require(address(rebasingParityHook) == hookAddress, "RebasingParityHookScript: hook address mismatch");
+        RebasingDirectPool rebasingParityHook = new RebasingDirectPool{salt: salt}(manager, treasury, poolKey);
+        require(address(rebasingParityHook) == hookAddress, "RebasingDirectPoolScript: hook address mismatch");
 
         // Additional helpers for interacting with the pool
         vm.startBroadcast();

@@ -8,14 +8,14 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {RebasingParityHook} from "../src/RebasingParityHook.sol";
-import {ParityLP} from "../src/ParityLP.sol";
+import {RebasingDirectPool} from "../src/RebasingDirectPool.sol";
+import {ExchangeLP} from "../src/ExchangeLP.sol";
 import {StETH} from "../src/StETH.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
 contract RebaseYieldDistributionTest is Test, Fixtures {
-    RebasingParityHook hook;
-    ParityLP lpToken;
+    RebasingDirectPool hook;
+    ExchangeLP lpToken;
     StETH stETH;
 
     function setUp() public {
@@ -35,9 +35,9 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
         key = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
 
         bytes memory constructorArgs = abi.encode(manager, address(0x999), key); // treasury address
-        deployCodeTo("RebasingParityHook.sol:RebasingParityHook", constructorArgs, flags);
+        deployCodeTo("RebasingDirectPool.sol:RebasingDirectPool", constructorArgs, flags);
 
-        hook = RebasingParityHook(flags);
+        hook = RebasingDirectPool(flags);
         lpToken = hook.LP_TOKEN();
         manager.initialize(key, SQRT_PRICE_1_1);
 
