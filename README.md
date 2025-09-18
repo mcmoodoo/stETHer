@@ -214,6 +214,7 @@ The system executes swaps at a fixed 1:1 ratio without price impact. A 10,000 ET
 ### Liquidity Provider Economics
 
 Liquidity providers experience:
+
 - No impermanent loss due to correlated asset pricing
 - Fee earnings distributed across entire liquidity position
 - Preservation of underlying stETH yield through shares-based accounting
@@ -222,6 +223,7 @@ Liquidity providers experience:
 ### Automated Rebalancing
 
 Pool balance maintenance operates through economic mechanisms:
+
 - Imbalance-triggered fee increases
 - Fee-funded rebalancing incentives
 - Self-contained operation within revenue constraints
@@ -234,20 +236,12 @@ The implementation provides deterministic execution for large transactions throu
 
 ### ETH/stETH Trading
 
-- Token exchanges without price impact for staking operations
+- Token exchanges without price impact
 - Large volume swaps with deterministic execution
 - Arbitrage operations between different platforms
 - Liquidity provision with yield preservation
-
-### Additional Asset Pairs
-
-The architecture supports trading pairs with correlated valuations:
-- Stablecoin pairs (USDC/USDT)
-- Liquid staking derivatives (wstETH/stETH)
-- Wrapped token variants (ETH/WETH, BTC/WBTC)
 
 ## Test Coverage
 
 **Test suite:** 78 tests across 7 files
 **Code coverage:** 2,040+ lines including unit tests, integration tests, rebasing mechanics, fee distribution, and edge cases
-
