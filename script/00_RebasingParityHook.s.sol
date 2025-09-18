@@ -9,11 +9,11 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 
 import {Constants} from "./base/Constants.sol";
-import {RebasingDirectPool} from "../src/RebasingDirectPool.sol";
+import {RebasingParityPool} from "../src/RebasingParityPool.sol";
 import {HookMiner} from "v4-periphery/src/utils/HookMiner.sol";
 
-/// @notice Mines the address and deploys the RebasingDirectPool.sol Hook contract
-contract RebasingDirectPoolScript is Script, Constants {
+/// @notice Mines the address and deploys the RebasingParityPool.sol Hook contract
+contract RebasingParityPoolScript is Script, Constants {
     function setUp() public {}
 
     function run() public {
@@ -37,14 +37,14 @@ contract RebasingDirectPoolScript is Script, Constants {
 
         bytes memory constructorArgs = abi.encode(POOLMANAGER, treasury, poolKey);
         (address hookAddress, bytes32 salt) =
-            HookMiner.find(CREATE2_DEPLOYER, flags, type(RebasingDirectPool).creationCode, constructorArgs);
+            HookMiner.find(CREATE2_DEPLOYER, flags, type(RebasingParityPool).creationCode, constructorArgs);
 
         // Update pool key with actual hook address
         poolKey.hooks = IHooks(hookAddress);
 
         // Deploy the hook using CREATE2
         vm.broadcast();
-        RebasingDirectPool rebasingParityHook = new RebasingDirectPool{salt: salt}(IPoolManager(POOLMANAGER), treasury, poolKey);
-        require(address(rebasingParityHook) == hookAddress, "RebasingDirectPoolScript: hook address mismatch");
+        RebasingParityPool rebasingParityHook = new RebasingParityPool{salt: salt}(IPoolManager(POOLMANAGER), treasury, poolKey);
+        require(address(rebasingParityHook) == hookAddress, "RebasingParityPoolScript: hook address mismatch");
     }
 }

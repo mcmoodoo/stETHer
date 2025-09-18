@@ -3,9 +3,9 @@ pragma solidity ^0.8.24;
 
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 
-/// @title Exchange LP Token
-/// @notice ERC20 token representing liquidity provider shares in the direct exchange pool
-contract ExchangeLP is ERC20 {
+/// @title Parity LP Token
+/// @notice ERC20 token representing liquidity provider shares in the parity pool
+contract ParityLP is ERC20 {
     address public immutable HOOK;
     
     modifier onlyHook() {
@@ -13,7 +13,7 @@ contract ExchangeLP is ERC20 {
         _;
     }
     
-    constructor(address _hook) ERC20("Direct Exchange LP", "DELP", 18) {
+    constructor(address _hook) ERC20("Parity LP", "PLP", 18) {
         require(_hook != address(0), "Hook cannot be zero address");
         HOOK = _hook;
     }

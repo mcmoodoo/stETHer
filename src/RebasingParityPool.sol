@@ -12,10 +12,10 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {SafeCast} from "v4-core/src/libraries/SafeCast.sol";
-import {ExchangeLP} from "./ExchangeLP.sol";
+import {ParityLP} from "./ParityLP.sol";
 import {ProtocolRevenue} from "./ProtocolRevenue.sol";
 
-contract RebasingDirectPool is BaseHook, SafeCallback {
+contract RebasingParityPool is BaseHook, SafeCallback {
     using SafeCast for uint256;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
@@ -65,7 +65,7 @@ contract RebasingDirectPool is BaseHook, SafeCallback {
     // ============ Immutable State ============
 
     /// @notice LP token for this pool
-    ExchangeLP public immutable LP_TOKEN;
+    ParityLP public immutable LP_TOKEN;
 
     /// @notice Protocol revenue management
     ProtocolRevenue public immutable PROTOCOL_REVENUE;
@@ -95,7 +95,7 @@ contract RebasingDirectPool is BaseHook, SafeCallback {
     event PoolBalancesUpdated(uint256 ethBalance, uint256 stethBalance);
 
     constructor(IPoolManager poolManager_, address treasury, PoolKey memory allowedPoolKey) SafeCallback(poolManager_) {
-        LP_TOKEN = new ExchangeLP(address(this));
+        LP_TOKEN = new ParityLP(address(this));
         PROTOCOL_REVENUE = new ProtocolRevenue(treasury);
         allowedPoolId = allowedPoolKey.toId();
     }
