@@ -1,4 +1,8 @@
-# Uniswap v4 RebasingParityHook with Dynamic Fees
+# stETHer: Parity Pool AMM for ETH/stETH Trading
+
+🏆 **3rd Place Winner - Uniswap Foundation Prize at EthGlobal NYC 2025**
+
+A custom parity pool that enables direct 1:1 ETH/stETH swaps with zero slippage, dynamic asymmetric fees, and sustainable incentives.
 
 ## How It Works
 
@@ -7,7 +11,7 @@ graph TB
     subgraph "Pool State"
         ETH[ETH Balance]
         STETH[stETH Balance]
-        INVARIANT["x + y = k<br/>(Parity Invariant)"]
+        EXCHANGE["1:1 Direct Exchange<br/>(Parity Pool)"]
     end
 
     subgraph "Trading Flow"
@@ -99,7 +103,7 @@ sequenceDiagram
 
     Note over Trader,stETH: ETH → stETH Swap (0% fee)
     Trader->>Pool: swap(100 ETH → stETH)
-    Pool->>Pool: Check pool balance (x + y = k)
+    Pool->>Pool: Check pool balances for 1:1 exchange
     Pool->>Pool: Calculate 1:1 swap (0% fee)
     Pool->>stETH: transfer(Trader, 100 stETH)
     Note right of Pool: May include incentive bonus<br/>if protocol has fees
@@ -120,55 +124,55 @@ sequenceDiagram
     Pool->>Trader: Transfer ETH (minus enhanced fees)
 ```
 
-## What I Built
+## What We Built
 
-I created a new type of AMM that works completely differently from traditional pools. Instead of the usual x\*y=k curve that causes slippage, I use x+y=k which enables perfect 1:1 swaps when the pool is balanced.
+This project introduces a revolutionary parity pool design that fundamentally changes how correlated assets trade. Instead of using traditional AMM curves that cause slippage, this implements direct 1:1 token exchanges enabling perfect parity swaps regardless of pool size.
 
-The magic happens with my dynamic fee system - I charge zero fees for ETH→stETH swaps (encouraging staking) but apply increasing fees for stETH→ETH swaps as the pool gets imbalanced. This naturally keeps the pool stable while generating revenue that funds incentives to bring it back into balance.
+**Key Innovation**: Dynamic asymmetric fees that encourage ETH→stETH swaps (0% fee) while applying variable fees for stETH→ETH based on pool imbalance. This creates natural economic pressure to maintain pool balance while generating sustainable revenue.
 
-The pool also properly handles rebasing tokens like stETH, so liquidity providers don't lose their staking yield just because they're providing liquidity.
+**Rebasing Support**: First AMM to properly handle rebasing tokens like stETH without destroying the underlying yield for liquidity providers through shares-based accounting.
 
 ## How It's Built
 
-The core innovation is using `x + y = k` instead of the traditional `x * y = k` formula. This means when the pool is balanced, you can swap 100 ETH for exactly 100 stETH with zero slippage - something impossible with regular AMMs.
+The core innovation is direct 1:1 token exchanges instead of traditional AMM curves. This means you can swap 100 ETH for exactly 100 stETH with zero slippage regardless of pool size - something impossible with curve-based AMMs.
 
-I implemented this as a Uniswap v4 hook that intercepts swaps and applies my custom logic. The fee structure is intentionally asymmetric:
+This is implemented as a Uniswap v4 hook that intercepts swaps and applies direct 1:1 exchange logic. The fee structure is intentionally asymmetric:
 
-- ETH → stETH: Always 0% (I want to encourage staking)
-- stETH → ETH: Dynamic fees that increase as the pool gets unbalanced
+- ETH → stETH: Always 0% (encourages staking)
+- stETH → ETH: Dynamic fees from 0.1% to 5% based on pool imbalance
 
 ### Dynamic Fee Tiers
 
-The fees automatically adjust based on how much ETH is left in the pool:
+The fees automatically adjust based on pool imbalance ratios:
 
-- Pool has 70-80% ETH: 0.1% fee (balanced, low fee)
-- Pool has 60-70% ETH: 0.5% fee (slightly unbalanced)
-- Pool has 50-60% ETH: 1.0% fee (getting concerning)
-- Pool has 40-50% ETH: 2.0% fee (significantly unbalanced)
-- Pool has <40% ETH: 5.0% fee (emergency mode)
+- Balanced (ratio ≤ 1.1:1): 0.1% base fee
+- Slight imbalance (ratio 1.1-1.2:1): 0.2% fee
+- Moderate imbalance (ratio 1.2-1.5:1): 0.5% fee
+- High imbalance (ratio 1.5-2:1): 2.0% fee
+- Critical imbalance (ratio > 2:1): 5.0% maximum protection fee
 
 This creates natural economic pressure to keep the pool balanced - as ETH gets scarce, it becomes more expensive to withdraw, which encourages people to deposit more ETH instead.
 
 ### Rebasing Token Support
 
-One of the trickiest parts was handling stETH properly. Regular AMMs break when you add rebasing tokens because the balances change over time. I solved this with a shares-based accounting system that preserves the underlying yield.
+Regular AMMs break when handling rebasing tokens because balances change over time. This implementation solves it with a shares-based accounting system that preserves underlying yield.
 
-My test stETH implementation gives 5% APY, and crucially, LPs don't lose this yield when they provide liquidity. The rebasing happens continuously based on time elapsed.
+The custom stETH implementation provides 5% APY through continuous time-based rebasing. Crucially, LPs retain their staking yield while providing liquidity through the shares mechanism.
 
 ### LP Token System
 
-I built a proper ERC20 LP token that represents your share of the pool. When you add liquidity, you get LP tokens. When you remove liquidity, you burn your LP tokens and get back your proportional share of the pool PLUS any fees that accumulated while you were providing liquidity.
+The system includes a custom ERC20 LP token (`ParityLP`) that represents pool shares. Liquidity providers receive LP tokens when depositing and burn them when withdrawing to receive their proportional share plus accumulated fees.
 
-The cool part is that fees automatically compound - instead of needing to manually claim them, they just increase the value of your LP position over time.
+Fees automatically compound into LP positions, eliminating the need for manual claiming while continuously increasing the value of LP holdings.
 
 ### Revenue Sharing
 
-Here's where it gets interesting economically. When fees are collected, they're split:
+The protocol implements a sophisticated revenue sharing model through the `ProtocolRevenue` contract:
 
-- 90% goes to liquidity providers (you earn fees for providing liquidity)
-- 10% goes to the protocol
-
-But here's the clever bit - those protocol fees don't just sit there. They fund incentives for ETH→stETH swaps. So when the pool gets unbalanced (too much stETH, not enough ETH), we can use the accumulated protocol fees to give people a small bonus for depositing ETH.
+- **90% to LPs**: Direct fee earnings for providing liquidity
+- **10% to Protocol**: Treasury accumulation with configurable parameters
+- **Large Swap Fees**: Additional 0.05% protocol fee for swaps >1000 tokens
+- **Sustainable Incentives**: Protocol fees fund ETH→stETH swap bonuses during imbalances
 
 ### The Self-Balancing Loop
 
@@ -193,7 +197,7 @@ The system is completely sustainable because it only spends what it earns.
 
 1. **Main Pool Contract** (`RebasingParityHook.sol`): Core AMM logic and Uniswap v4 hook integration
 2. **LP Token** (`ParityLP.sol`): ERC20 token for liquidity provider shares
-3. **Revenue Manager** (`RevenueManager.sol`): Fee calculation and distribution
+3. **Protocol Revenue** (`ProtocolRevenue.sol`): Fee collection and protocol treasury management
 4. **Rebasing Token** (`StETH.sol`): Mock stETH with 5% APY for testing
 
 ### Key Functions
@@ -206,10 +210,14 @@ The system is completely sustainable because it only spends what it earns.
 
 ### Testing Suite
 
-- **74 Tests Total** covering all functionality
-- **Unit Tests**: Individual contract functionality
-- **Rebasing Tests**: Time-based yield mechanics
-- **Fee Distribution Tests**: Multi-LP scenarios
+- **78 Tests Total** across 7 comprehensive test files:
+  - `RebasingParityHookExtended.t.sol`: Core hook functionality (11 tests)
+  - `ProtocolRevenueExtended.t.sol`: Revenue management (28 tests)
+  - `LPTokens.t.sol`: LP token mechanics (6 tests)
+  - `StETHRebasing.t.sol`: Rebasing token behavior (9 tests)
+  - `RebasingParityHookBranchCoverage.t.sol`: Edge cases (9 tests)
+  - `SustainableIncentives.t.sol`: Incentive system (11 tests)
+  - `RebaseYieldDistribution.t.sol`: Yield distribution (4 tests)
 
 ## Why This Design Is Better
 
@@ -267,20 +275,23 @@ Unlike most DeFi protocols that promise the moon and then slowly die as token in
 
 ```bash
 # Start local development environment
-make dev
+just dev
 
 # Run tests
-make test
+just test
+
+# Run tests with verbose output
+just test -vvv
 
 # Stop environment
-make stop
+just stop
 ```
 
 ### Test Coverage
 
-- **Unit Tests**: 24 tests for individual contracts
-- **Integration Tests**: 50 tests for cross-contract functionality
-- **All Tests Pass**: 74/74 tests passing with comprehensive coverage
+- **Comprehensive Test Suite**: 78 tests across 7 test files
+- **2,040+ lines of test code** covering all functionality
+- **Full Coverage**: Unit tests, integration tests, rebasing mechanics, fee distribution, and edge cases
 
 ### Deployment
 
@@ -290,10 +301,10 @@ make stop
 
 ## What Makes This Special
 
-I'm pretty sure this is the first parity pool AMM built on Uniswap v4, and definitely the first AMM that properly handles rebasing tokens without destroying the underlying yield.
+**🏆 Award-Winning Innovation**: This project won 3rd place from the Uniswap Foundation at EthGlobal NYC 2025, recognizing its groundbreaking approach to AMM design.
 
-The dynamic fee system is also something new - most AMMs just have fixed fees that don't respond to market conditions. My fees actually get smarter based on what's happening in the pool.
+**First of Its Kind**: The first parity pool AMM built on Uniswap v4 that properly handles rebasing tokens without destroying underlying yield. The dynamic fee system responds intelligently to market conditions rather than using static rates.
 
-But the real innovation is how all the pieces work together. The fees fund the incentives, the incentives balance the pool, the balancing reduces the fees - it's a self-sustaining economic loop that gets more stable over time rather than less.
+**Self-Sustaining Economics**: The innovation lies in how all components work together - fees fund incentives, incentives balance the pool, balancing reduces fees. This creates a self-sustaining economic loop that becomes more stable over time.
 
-I think this could be a template for how to build AMMs for any pair of correlated assets, not just ETH/stETH. The parity invariant just makes so much more sense when you know the assets should trade near 1:1.
+**Template for the Future**: This design establishes a template for building parity pools for any correlated asset pairs. Direct 1:1 exchanges make perfect sense when assets should trade at par, opening possibilities for USDC/USDT, wstETH/stETH, and other correlated pairs.
