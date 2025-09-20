@@ -1,20 +1,20 @@
 {
   "network": "unichain",
   "chainId": 130,
-  "timestamp": 1758382035,
-  "deployer": "0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38",
+  "timestamp": 1758387533,
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   "contracts": {
     "PoolManager": "0x1F98400000000000000000000000000000000004",
-    "StETH": "0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519",
-    "ProtocolRevenue": "0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496",
-    "RebasingParityPool": "0xFEb758c9A1a853C0778656Cc4E2Ec8288e5276ce",
-    "ParityLP": "0x34f6188D330eFde16dd0B125e3e92f259f491eB7"
+    "StETH": "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE",
+    "ProtocolRevenue": "0x68B1D87F95878fE05B998F19b66F4baba5De1aed",
+    "RebasingParityPool": "0xAb9c03170b2899fCb7D47310C748FD92a43ECAEC",
+    "ParityLP": "0xD5AFE6462E363146Cca3818B0CebC8f2E391235B"
   },
   "poolKey": {
     "currency0": "0x0000000000000000000000000000000000000000",
-    "currency1": "0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519",
+    "currency1": "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE",
     "fee": 3000,
     "tickSpacing": 60,
-    "hooks": "0xFEb758c9A1a853C0778656Cc4E2Ec8288e5276ce"
+    "hooks": "0xAb9c03170b2899fCb7D47310C748FD92a43ECAEC"
   }
 }

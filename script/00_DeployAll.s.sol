@@ -129,6 +129,15 @@ contract DeployAllScript is Script {
             allowedPoolKey
         );
 
+        // Verify deployment worked
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(hook)
+        }
+        console.log("Hook deployed at:", address(hook));
+        console.log("Hook code size:", codeSize, "bytes");
+        require(codeSize > 0, "Hook deployment failed - no code at address");
+
         // Log deployment info
         uint160 deployedFlags = uint160(address(hook)) & 0x3FFF;
         console.log("Required flags:", flags);
