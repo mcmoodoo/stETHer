@@ -100,6 +100,7 @@ contract RebasingParityPool is BaseHook, SafeCallback {
         allowedPoolId = allowedPoolKey.toId();
     }
 
+
     function _poolManager() internal view override returns (IPoolManager) {
         return poolManager;
     }

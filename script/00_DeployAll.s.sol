@@ -140,8 +140,7 @@ contract DeployAllScript is Script {
 
         // Log deployment info
         uint160 deployedFlags = uint160(address(hook)) & 0x3FFF;
-        console.log("Required flags:", flags);
-        console.log("Deployed flags:", deployedFlags);
+        console.log("Deployed address flags:", deployedFlags);
         console.log("Hook validation will be performed by PoolManager");
 
         console.log("RebasingParityPool deployed at:", address(hook));

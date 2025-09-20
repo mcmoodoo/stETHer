@@ -34,6 +34,7 @@ export default defineConfig({
         const cleanContractName = safeContract
           .replace(/Contract$/, '')
           .replace(/^I/, '') // Remove interface prefix
+          .replace(/^StETH$/, 'StEth') // Fix StETH naming conflict
         const cleanItemName = safeItem
           .replace(/^_/, '') // Remove underscore prefix
           .replace(/\$$/, '') // Remove dollar suffix

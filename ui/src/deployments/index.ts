@@ -28,6 +28,7 @@ export interface DeploymentData {
 // Network mapping
 const NETWORK_FILES = {
   localhost: 'deployments-localhost.json',
+  unichain: 'deployments-unichain.json',
   sepolia: 'deployments-sepolia.json',
   mainnet: 'deployments-mainnet.json',
 } as const
@@ -76,6 +77,8 @@ export async function getDeploymentByChainId(
     11155111: 'sepolia',
     31337: 'localhost',
     1337: 'localhost',
+    130: 'unichain',
+    1300: 'unichain', // Alternative chain ID for wallet compatibility
   }
 
   const network = networkMap[chainId]

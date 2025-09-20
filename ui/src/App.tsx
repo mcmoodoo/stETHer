@@ -34,6 +34,12 @@ function App() {
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(true)
   const [addressError, setAddressError] = useState<string | null>(null)
 
+  // stETH balance - must be after contractAddresses state
+  const { data: stethBalance } = useBalance({
+    address: address,
+    token: contractAddresses?.StETH as `0x${string}`,
+  })
+
   // Load contract addresses
   useEffect(() => {
     const loadAddresses = async () => {
@@ -99,7 +105,10 @@ function App() {
     if (token === 'ETH') {
       return formatBalance(ethBalance?.value)
     }
-    return '0.0' // TODO: Add stETH balance fetching
+    if (token === 'stETH') {
+      return formatBalance(stethBalance?.value)
+    }
+    return '0.0'
   }
   
   const calculateOutput = (input: string) => {
