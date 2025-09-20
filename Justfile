@@ -14,6 +14,10 @@ deploy:
 generate:
     cd ui && bun run wagmi:generate
 
+# Send 1 ETH from anvil default wallet to specified address
+fund ADDRESS="0xA0c5Df94F8dd2f9aB6a4AD7A323a924670603Df8":
+    cast send {{ADDRESS}} --value 1ether --rpc-url http://localhost:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
 # Run frontend
 dev:
     cd ui && bun run dev
