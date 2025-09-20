@@ -1,9 +1,9 @@
 default:
     @just --list
 
-# Start local anvil node
+# Start local anvil node forked from Unichain mainnet
 anvil:
-    anvil
+    anvil --fork-url $INFURA_UNICHAIN_MAINNET_RPC
 
 # Deploy contracts and generate UI types
 deploy:
