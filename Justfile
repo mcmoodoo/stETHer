@@ -18,6 +18,10 @@ generate:
 fund ADDRESS="0xA0c5Df94F8dd2f9aB6a4AD7A323a924670603Df8":
     cast send {{ADDRESS}} --value 1ether --rpc-url http://localhost:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
+# Mint stETH tokens to specified address
+mint-steth AMOUNT="10" ADDRESS="0xA0c5Df94F8dd2f9aB6a4AD7A323a924670603Df8":
+    cast send $(jq -r '.contracts.StETH' ui/src/deployments/deployments-unichain.json) "mint(address,uint256)" {{ADDRESS}} {{AMOUNT}}000000000000000000 --rpc-url http://localhost:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
 # Run frontend
 dev:
     cd ui && bun run dev
