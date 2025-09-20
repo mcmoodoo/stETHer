@@ -60,10 +60,13 @@ contract DeployAllScript is Script {
         // 6. Create pool key
         _createPoolKey();
 
-        // 7. Skip pool initialization for now
-        console.log("Skipping pool initialization - hook implementation needs refinement");
+        // 7. Initialize the pool
+        _initializePool();
 
-        // 8. Save deployment addresses to JSON
+        // 8. Add initial liquidity (optional)
+        _addInitialLiquidity();
+
+        // 9. Save deployment addresses to JSON
         _saveDeploymentAddresses();
 
         console.log("=== Deployment Complete ===");
@@ -89,15 +92,6 @@ contract DeployAllScript is Script {
     function _deployRebasingParityPool() internal returns (address) {
         console.log("Deploying RebasingParityPool...");
 
-        // Create the pool key that will be allowed
-        PoolKey memory allowedPoolKey = PoolKey({
-            currency0: Currency.wrap(address(0)), // ETH
-            currency1: Currency.wrap(stETH),
-            fee: POOL_FEE,
-            tickSpacing: TICK_SPACING,
-            hooks: IHooks(address(0)) // Will be set after deployment
-        });
-
         // Mine for a valid hook address using CREATE2
         console.log("Mining for valid hook address...");
 
@@ -111,23 +105,118 @@ contract DeployAllScript is Script {
             Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
 
-        bytes memory creationCode = abi.encodePacked(
-            type(RebasingParityPool).creationCode,
-            abi.encode(
-                IPoolManager(UNICHAIN_POOL_MANAGER),
-                TREASURY,
-                allowedPoolKey
-            )
-        );
+        // First, mine with a placeholder PoolKey (hooks set to address(0))
+        PoolKey memory miningPoolKey = PoolKey({
+            currency0: Currency.wrap(address(0)), // ETH
+            currency1: Currency.wrap(stETH),
+            fee: POOL_FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(0)) // Placeholder during mining
+        });
 
-        bytes32 salt = _mineHookAddress(creationCode, flags);
-
-        // Deploy with the mined salt
-        RebasingParityPool hook = new RebasingParityPool{salt: salt}(
+        // Create constructor args for mining
+        bytes memory miningConstructorArgs = abi.encode(
             IPoolManager(UNICHAIN_POOL_MANAGER),
             TREASURY,
-            allowedPoolKey
+            miningPoolKey
         );
+
+        bytes memory miningCreationCode = abi.encodePacked(
+            type(RebasingParityPool).creationCode,
+            miningConstructorArgs
+        );
+
+        // Mine for a valid salt and address
+        (bytes32 salt, address minedAddress) = _mineHookAddressWithReturn(miningCreationCode, flags);
+
+        console.log("Mined hook address:", minedAddress);
+
+        // Now create the ACTUAL pool key with the mined hook address
+        PoolKey memory actualPoolKey = PoolKey({
+            currency0: Currency.wrap(address(0)), // ETH
+            currency1: Currency.wrap(stETH),
+            fee: POOL_FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(minedAddress) // Use the mined address!
+        });
+
+        // Create the ACTUAL constructor args with correct hook address
+        bytes memory actualConstructorArgs = abi.encode(
+            IPoolManager(UNICHAIN_POOL_MANAGER),
+            TREASURY,
+            actualPoolKey
+        );
+
+        bytes memory actualCreationCode = abi.encodePacked(
+            type(RebasingParityPool).creationCode,
+            actualConstructorArgs
+        );
+
+        // Debug: Log the exact creation code being used
+        console.log("=== DEBUGGING CREATION CODE ===");
+        console.log("Mining creation code hash:");
+        console.logBytes32(keccak256(miningCreationCode));
+        console.log("Actual creation code hash:");
+        console.logBytes32(keccak256(actualCreationCode));
+        console.log("UNICHAIN_POOL_MANAGER:", UNICHAIN_POOL_MANAGER);
+        console.log("TREASURY:", TREASURY);
+        console.log("actualPoolKey.currency0:", Currency.unwrap(actualPoolKey.currency0));
+        console.log("actualPoolKey.currency1:", Currency.unwrap(actualPoolKey.currency1));
+        console.log("actualPoolKey.fee:", actualPoolKey.fee);
+        console.log("actualPoolKey.tickSpacing:", actualPoolKey.tickSpacing);
+        console.log("actualPoolKey.hooks:", address(actualPoolKey.hooks));
+
+        // The creation code is different, so we need to find a NEW salt for this!
+        console.log("Re-mining for deployment with correct pool key...");
+
+        // Mine again with the actual constructor args to get the right salt
+        (bytes32 deploymentSalt, address finalAddress) = _mineHookAddressWithReturn(actualCreationCode, flags);
+
+        console.log("Final deployment address will be:", finalAddress);
+
+        // Debug: Create the exact same creation code that Solidity will use for deployment
+        bytes memory deploymentConstructorArgs = abi.encode(
+            IPoolManager(UNICHAIN_POOL_MANAGER),
+            TREASURY,
+            actualPoolKey
+        );
+        bytes memory deploymentCreationCode = abi.encodePacked(
+            type(RebasingParityPool).creationCode,
+            deploymentConstructorArgs
+        );
+        bytes32 deploymentInitCodeHash = keccak256(deploymentCreationCode);
+        address predictedDeploymentAddress = vm.computeCreate2Address(
+            deploymentSalt,
+            deploymentInitCodeHash,
+            0x4e59b44847b379578588920cA78FbF26c0B4956C
+        );
+
+        console.log("=== DEPLOYMENT VERIFICATION ===");
+        console.log("Deployment creation code hash:");
+        console.logBytes32(deploymentInitCodeHash);
+        console.log("Predicted deployment address:", predictedDeploymentAddress);
+        console.log("Do creation code hashes match?", keccak256(actualCreationCode) == deploymentInitCodeHash);
+        console.log("msg.sender during mining:", msg.sender);
+        console.log("Deployment salt:");
+        console.logBytes32(deploymentSalt);
+
+        // Deploy with Solidity's CREATE2 syntax
+        RebasingParityPool hook = new RebasingParityPool{salt: deploymentSalt}(
+            IPoolManager(UNICHAIN_POOL_MANAGER),
+            TREASURY,
+            actualPoolKey
+        );
+
+        console.log("Actual deployment address:", address(hook));
+
+        if (address(hook) != finalAddress) {
+            console.log("ERROR: Address mismatch!");
+            console.log("Expected:", finalAddress);
+            console.log("Actual:", address(hook));
+            console.log("This means the creation code used for mining doesn't match deployment");
+        } else {
+            console.log("SUCCESS: Hook deployed at the correctly mined address!");
+        }
 
         // Verify deployment worked
         uint256 codeSize;
@@ -173,11 +262,60 @@ contract DeployAllScript is Script {
     function _initializePool() internal {
         console.log("Initializing pool...");
 
-        // Initialize the pool with 1:1 price
-        IPoolManager(UNICHAIN_POOL_MANAGER).initialize(poolKey, SQRT_PRICE_1_1);
+        try IPoolManager(UNICHAIN_POOL_MANAGER).initialize(poolKey, SQRT_PRICE_1_1) {
+            console.log("Pool initialized successfully with 1:1 price");
 
-        PoolId poolId = PoolIdLibrary.toId(poolKey);
-        console.logBytes32(PoolId.unwrap(poolId));
+            PoolId poolId = PoolIdLibrary.toId(poolKey);
+            console.log("Pool ID:");
+            console.logBytes32(PoolId.unwrap(poolId));
+
+            // Pool initialization successful
+            console.log("Pool initialized with sqrtPriceX96:", SQRT_PRICE_1_1);
+        } catch Error(string memory reason) {
+            console.log("Pool initialization failed:", reason);
+            console.log("This might be because the pool already exists or hook validation failed");
+        } catch {
+            console.log("Pool initialization failed with unknown error");
+        }
+    }
+
+    function _addInitialLiquidity() internal {
+        console.log("Adding initial liquidity...");
+
+        // For now, we'll assume pool initialization worked
+        // In production, you'd want to check pool state properly
+        console.log("Preparing to add initial liquidity...");
+
+        // Add a small amount of initial liquidity (0.1 ETH and equivalent stETH)
+        uint256 initialLiquidity = 0.1 ether;
+
+        // First, mint some stETH to the deployer
+        console.log("Minting stETH for initial liquidity...");
+        StETH(stETH).mint(msg.sender, initialLiquidity);
+        console.log("Minted", initialLiquidity, "stETH");
+
+        // Check stETH balance
+        uint256 stethBalance = StETH(stETH).balanceOf(msg.sender);
+        console.log("Deployer stETH balance:", stethBalance);
+
+        // Approve stETH spending to the hook
+        StETH(stETH).approve(rebasingParityPool, initialLiquidity);
+
+        // Add liquidity through the hook's addLiquidity function
+        try RebasingParityPool(rebasingParityPool).addLiquidity{value: initialLiquidity}(
+            poolKey,
+            initialLiquidity
+        ) returns (uint256 lpTokens) {
+            console.log("Initial liquidity added successfully");
+            console.log("LP tokens received:", lpTokens);
+            console.log("ETH deposited:", initialLiquidity);
+            console.log("stETH deposited:", initialLiquidity);
+        } catch Error(string memory reason) {
+            console.log("Adding liquidity failed:", reason);
+            console.log("You may need to manually add liquidity after deployment");
+        } catch {
+            console.log("Adding liquidity failed with unknown error");
+        }
     }
 
     function _saveDeploymentAddresses() internal {
@@ -237,11 +375,12 @@ contract DeployAllScript is Script {
         for (uint256 salt = 0; salt < 1000000; salt++) {
             bytes32 saltBytes = bytes32(salt);
 
-            // Use vm.computeCreate2Address with the actual deployer that will be used
+            // Use vm.computeCreate2Address with Foundry's CREATE2 factory
+            // Foundry uses the CREATE2 factory at this address
             address hookAddress = vm.computeCreate2Address(
                 saltBytes,
                 initCodeHash,
-                msg.sender
+                0x4e59b44847b379578588920cA78FbF26c0B4956C
             );
 
             // Check if the address matches the required flags
@@ -250,6 +389,33 @@ contract DeployAllScript is Script {
                 console.log("Found valid address after", salt, "attempts");
                 console.log("Target hook address:", hookAddress);
                 return saltBytes;
+            }
+        }
+
+        revert("Could not find valid hook address within reasonable attempts");
+    }
+
+    /// @notice Mine for a valid hook address and return both salt and address
+    function _mineHookAddressWithReturn(bytes memory creationCode, uint160 flags) internal returns (bytes32, address) {
+        bytes32 initCodeHash = keccak256(creationCode);
+
+        for (uint256 salt = 0; salt < 1000000; salt++) {
+            bytes32 saltBytes = bytes32(salt);
+
+            // Use vm.computeCreate2Address with Foundry's CREATE2 factory
+            // Foundry uses the CREATE2 factory at this address
+            address hookAddress = vm.computeCreate2Address(
+                saltBytes,
+                initCodeHash,
+                0x4e59b44847b379578588920cA78FbF26c0B4956C
+            );
+
+            // Check if the address matches the required flags
+            // The hook address must have its lower 14 bits match the permission flags
+            if (uint160(hookAddress) & 0x3FFF == flags) {
+                console.log("Found valid address after", salt, "attempts");
+                console.log("Target hook address:", hookAddress);
+                return (saltBytes, hookAddress);
             }
         }
 

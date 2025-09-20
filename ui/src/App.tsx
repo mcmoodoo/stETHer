@@ -134,6 +134,34 @@ function App() {
     setToAmount(fromAmount)
   }
 
+  const handleSwap = async () => {
+    if (!isConnected || !fromAmount || !contractAddresses) {
+      console.log('Cannot swap - missing requirements')
+      return
+    }
+
+    try {
+      console.log('Swap details:', {
+        from: fromToken,
+        to: toToken,
+        amount: fromAmount,
+        expectedOutput: toAmount,
+        fee: fee,
+      })
+
+      // The Uniswap v4 swap flow requires:
+      // 1. Pool must be initialized with PoolManager.initialize()
+      // 2. Use UniversalRouter at 0xef740bf23acae26f6492b10de645d6b98dc8eaf3
+      // 3. Or create a custom swapper contract that calls PoolManager.swap()
+
+      alert(`Swap Details:\n\nWould swap ${fromAmount} ${fromToken} for ${toAmount} ${toToken}\n\nPool Status: Not initialized\n\nNext Steps:\n1. Initialize pool via PoolManager\n2. Add initial liquidity\n3. Execute swap through UniversalRouter\n\nUniversalRouter: 0xef740bf23acae26f6492b10de645d6b98dc8eaf3`)
+
+    } catch (error) {
+      console.error('Swap failed:', error)
+      alert('Swap failed: ' + (error as Error).message)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -226,6 +254,7 @@ function App() {
                 className="w-full"
                 size="lg"
                 disabled={!isConnected || !fromAmount || isLoadingAddresses || !contractAddresses}
+                onClick={handleSwap}
               >
                 {!isConnected
                   ? 'Connect Wallet to Swap'
