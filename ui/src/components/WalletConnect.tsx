@@ -1,12 +1,19 @@
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
 import { Button } from '@/components/ui/button'
-import { Wallet, LogOut, AlertCircle } from 'lucide-react'
-import { useEffect } from 'react'
+import { Wallet, LogOut, AlertCircle, ChevronDown } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export function WalletConnect() {
   const { address, isConnected } = useAccount()
   const { connect, connectors, isPending, error } = useConnect()
   const { disconnect } = useDisconnect()
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   // Debug: Log available connectors
   useEffect(() => {
@@ -16,36 +23,25 @@ export function WalletConnect() {
     }
   }, [connectors, error])
 
-  const handleConnect = async () => {
+  const handleConnect = async (connector: any) => {
     try {
-      // Check if MetaMask is installed
-      if (typeof window !== 'undefined' && !window.ethereum) {
-        alert('MetaMask is not installed. Please install MetaMask and try again.')
-        return
-      }
-
-      // Try MetaMask connector first
-      const metaMaskConnector = connectors.find(
-        (connector) => connector.id === 'metaMask' || connector.name.toLowerCase().includes('metamask')
-      )
-      
-      // Then try injected connector
-      const injectedConnector = connectors.find(
-        (connector) => connector.id === 'injected'
-      )
-      
-      const connectorToUse = metaMaskConnector || injectedConnector || connectors[0]
-      
-      if (connectorToUse) {
-        console.log('Connecting with connector:', connectorToUse.name)
-        await connect({ connector: connectorToUse })
-      } else {
-        console.error('No suitable connector found')
-        alert('No wallet connector found. Please make sure you have a wallet installed.')
-      }
+      console.log('Connecting with connector:', connector.name)
+      await connect({ connector })
+      setIsDropdownOpen(false)
     } catch (err) {
       console.error('Failed to connect wallet:', err)
       alert(`Failed to connect wallet: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+  }
+
+  const getConnectorIcon = (connectorId: string) => {
+    switch (connectorId) {
+      case 'metaMask':
+        return '🦊'
+      case 'injected':
+        return '💰'
+      default:
+        return '🔗'
     }
   }
 
@@ -60,15 +56,36 @@ export function WalletConnect() {
 
   return (
     <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleConnect}
-        disabled={isPending}
-      >
-        <Wallet className="h-4 w-4 mr-2" />
-        {isPending ? 'Connecting...' : 'Connect Wallet'}
-      </Button>
+      <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+          >
+            <Wallet className="h-4 w-4 mr-2" />
+            {isPending ? 'Connecting...' : 'Connect Wallet'}
+            <ChevronDown className="h-4 w-4 ml-2" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {connectors.map((connector) => (
+            <DropdownMenuItem
+              key={connector.id}
+              onClick={() => handleConnect(connector)}
+              disabled={isPending}
+            >
+              <span className="mr-2">{getConnectorIcon(connector.id)}</span>
+              {connector.name}
+              {connector.id === 'injected' && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Browser Extension
+                </span>
+              )}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {error && (
         <div title={error.message}>
           <AlertCircle className="h-4 w-4 text-red-500" />
