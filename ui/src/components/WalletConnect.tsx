@@ -70,7 +70,9 @@ export function WalletConnect() {
         {isPending ? 'Connecting...' : 'Connect Wallet'}
       </Button>
       {error && (
-        <AlertCircle className="h-4 w-4 text-red-500" title={error.message} />
+        <div title={error.message}>
+          <AlertCircle className="h-4 w-4 text-red-500" />
+        </div>
       )}
     </div>
   )

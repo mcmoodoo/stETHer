@@ -1,5 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAccount, useBalance } from 'wagmi'
+import { getContractAddresses } from './deployments'
+import {
+  readRebasingParityPoolPoolEthBalance,
+  readRebasingParityPoolPoolStEthBalance,
+  readRebasingParityPoolTotalLiquidity,
+  readRebasingParityPoolAccumulatedFees0,
+  readRebasingParityPoolAccumulatedFees1,
+  readParityLpBalanceOf,
+} from './generated'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,21 +24,76 @@ function App() {
   const [toAmount, setToAmount] = useState('')
   const [isETHToStETH, setIsETHToStETH] = useState(true)
   
-  const { address, isConnected } = useAccount()
+  const { address, isConnected, chain } = useAccount()
   const { data: ethBalance } = useBalance({
     address: address,
   })
+
+  // Contract addresses state
+  const [contractAddresses, setContractAddresses] = useState<any>(null)
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(true)
+  const [addressError, setAddressError] = useState<string | null>(null)
+
+  // Load contract addresses
+  useEffect(() => {
+    const loadAddresses = async () => {
+      if (!chain?.id) {
+        setIsLoadingAddresses(false)
+        setAddressError('No chain connected')
+        return
+      }
+
+      try {
+        setAddressError(null)
+        const addresses = await getContractAddresses(chain.id)
+        setContractAddresses(addresses)
+      } catch (err) {
+        console.error('Failed to load contract addresses:', err)
+        setAddressError('Failed to load contract addresses')
+      } finally {
+        setIsLoadingAddresses(false)
+      }
+    }
+
+    loadAddresses()
+  }, [chain?.id])
+
+  // Generated hooks for contract data
+  const { data: poolEthBalance } = readRebasingParityPoolPoolEthBalance({
+    address: contractAddresses?.RebasingParityPool,
+  })
+
+  const { data: poolStEthBalance } = readRebasingParityPoolPoolStEthBalance({
+    address: contractAddresses?.RebasingParityPool,
+  })
+
+  const { data: totalLiquidity } = readRebasingParityPoolTotalLiquidity({
+    address: contractAddresses?.RebasingParityPool,
+  })
+
+  const { data: fees0 } = readRebasingParityPoolAccumulatedFees0({
+    address: contractAddresses?.RebasingParityPool,
+  })
+
+  const { data: fees1 } = readRebasingParityPoolAccumulatedFees1({
+    address: contractAddresses?.RebasingParityPool,
+  })
+
+  const { data: lpBalance } = readParityLpBalanceOf({
+    address: contractAddresses?.ParityLP,
+    args: address ? [address] : undefined,
+  })
+
+  // Format balances
+  const formatBalance = (balance: bigint | undefined) => {
+    if (!balance) return '0.0000'
+    return (Number(balance) / 1e18).toFixed(4)
+  }
   
   const fromToken = isETHToStETH ? 'ETH' : 'stETH'
   const toToken = isETHToStETH ? 'stETH' : 'ETH'
   const fee = isETHToStETH ? 0 : 0.1
   
-  const formatBalance = (balance: bigint | undefined, decimals = 18) => {
-    if (!balance) return '0.0'
-    const divisor = BigInt(10 ** decimals)
-    const formatted = Number(balance) / Number(divisor)
-    return formatted.toFixed(4)
-  }
   
   const getTokenBalance = (token: string) => {
     if (token === 'ETH') {
@@ -149,18 +213,42 @@ function App() {
               </div>
 
               {/* Swap Button */}
-              <Button 
-                className="w-full" 
-                size="lg" 
-                disabled={!isConnected || !fromAmount}
+              <Button
+                className="w-full"
+                size="lg"
+                disabled={!isConnected || !fromAmount || isLoadingAddresses || !contractAddresses}
               >
-                {!isConnected 
-                  ? 'Connect Wallet to Swap' 
-                  : !fromAmount 
-                  ? 'Enter Amount' 
+                {!isConnected
+                  ? 'Connect Wallet to Swap'
+                  : isLoadingAddresses
+                  ? 'Loading Contracts...'
+                  : !contractAddresses
+                  ? 'Contracts Not Deployed'
+                  : !fromAmount
+                  ? 'Enter Amount'
                   : `Swap ${fromToken} for ${toToken}`
                 }
               </Button>
+
+              {/* Contract Status */}
+              {addressError && (
+                <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <p className="text-sm text-orange-600">
+                    ⚠️ {addressError}
+                  </p>
+                </div>
+              )}
+
+              {contractAddresses && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-600">
+                    ✅ Contracts loaded successfully
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    LP Balance: {formatBalance(lpBalance)} tokens
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -181,20 +269,20 @@ function App() {
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-sm font-medium">ETH Balance:</span>
-                  <span className="text-sm">0.0 ETH</span>
+                  <span className="text-sm">{formatBalance(poolEthBalance)} ETH</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm font-medium">stETH Balance:</span>
-                  <span className="text-sm">0.0 stETH</span>
+                  <span className="text-sm">{formatBalance(poolStEthBalance)} stETH</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-sm font-medium">Total Liquidity:</span>
-                  <span className="text-sm">$0.00</span>
+                  <span className="text-sm">{formatBalance(totalLiquidity)} LP</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium">24h Volume:</span>
-                  <span className="text-sm">$0.00</span>
+                  <span className="text-sm font-medium">Accumulated Fees:</span>
+                  <span className="text-sm">{formatBalance(fees0)} ETH / {formatBalance(fees1)} stETH</span>
                 </div>
               </div>
             </CardContent>
