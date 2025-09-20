@@ -28,6 +28,7 @@ contract DeployAllScript is Script {
 
     // Pool configuration
     PoolKey public poolKey;
+    PoolKey public constructionPoolKey; // The pool key used during hook construction
     uint24 public constant POOL_FEE = 3000; // 0.3%
     int24 public constant TICK_SPACING = 60;
     uint160 public constant SQRT_PRICE_1_1 = 79228162514264337593543950336; // sqrt(1) in Q64.96
@@ -152,21 +153,7 @@ contract DeployAllScript is Script {
             actualConstructorArgs
         );
 
-        // Debug: Log the exact creation code being used
-        console.log("=== DEBUGGING CREATION CODE ===");
-        console.log("Mining creation code hash:");
-        console.logBytes32(keccak256(miningCreationCode));
-        console.log("Actual creation code hash:");
-        console.logBytes32(keccak256(actualCreationCode));
-        console.log("UNICHAIN_POOL_MANAGER:", UNICHAIN_POOL_MANAGER);
-        console.log("TREASURY:", TREASURY);
-        console.log("actualPoolKey.currency0:", Currency.unwrap(actualPoolKey.currency0));
-        console.log("actualPoolKey.currency1:", Currency.unwrap(actualPoolKey.currency1));
-        console.log("actualPoolKey.fee:", actualPoolKey.fee);
-        console.log("actualPoolKey.tickSpacing:", actualPoolKey.tickSpacing);
-        console.log("actualPoolKey.hooks:", address(actualPoolKey.hooks));
-
-        // The creation code is different, so we need to find a NEW salt for this!
+        // Re-mine with the correct pool key containing the mined hook address
         console.log("Re-mining for deployment with correct pool key...");
 
         // Mine again with the actual constructor args to get the right salt
@@ -174,31 +161,8 @@ contract DeployAllScript is Script {
 
         console.log("Final deployment address will be:", finalAddress);
 
-        // Debug: Create the exact same creation code that Solidity will use for deployment
-        bytes memory deploymentConstructorArgs = abi.encode(
-            IPoolManager(UNICHAIN_POOL_MANAGER),
-            TREASURY,
-            actualPoolKey
-        );
-        bytes memory deploymentCreationCode = abi.encodePacked(
-            type(RebasingParityPool).creationCode,
-            deploymentConstructorArgs
-        );
-        bytes32 deploymentInitCodeHash = keccak256(deploymentCreationCode);
-        address predictedDeploymentAddress = vm.computeCreate2Address(
-            deploymentSalt,
-            deploymentInitCodeHash,
-            0x4e59b44847b379578588920cA78FbF26c0B4956C
-        );
-
-        console.log("=== DEPLOYMENT VERIFICATION ===");
-        console.log("Deployment creation code hash:");
-        console.logBytes32(deploymentInitCodeHash);
-        console.log("Predicted deployment address:", predictedDeploymentAddress);
-        console.log("Do creation code hashes match?", keccak256(actualCreationCode) == deploymentInitCodeHash);
-        console.log("msg.sender during mining:", msg.sender);
-        console.log("Deployment salt:");
-        console.logBytes32(deploymentSalt);
+        // Save the construction pool key for later use
+        constructionPoolKey = actualPoolKey;
 
         // Deploy with Solidity's CREATE2 syntax
         RebasingParityPool hook = new RebasingParityPool{salt: deploymentSalt}(
@@ -243,13 +207,8 @@ contract DeployAllScript is Script {
     }
 
     function _createPoolKey() internal {
-        poolKey = PoolKey({
-            currency0: Currency.wrap(address(0)), // ETH
-            currency1: Currency.wrap(stETH),
-            fee: POOL_FEE,
-            tickSpacing: TICK_SPACING,
-            hooks: IHooks(rebasingParityPool)
-        });
+        // Use the exact same pool key that was used during hook construction
+        poolKey = constructionPoolKey;
 
         console.log("Pool key created:");
         console.log("  Currency0 (ETH):", Currency.unwrap(poolKey.currency0));
