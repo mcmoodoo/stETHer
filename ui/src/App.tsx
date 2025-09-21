@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useAccount, useBalance } from 'wagmi'
-import { getContractAddresses } from './deployments'
+import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { readContract, waitForTransactionReceipt } from 'wagmi/actions'
+import { config } from './wagmi'
+import { parseEther, encodeAbiParameters } from 'viem'
+import { getContractAddresses, getPoolKey, type DeploymentAddresses, type PoolKeyData } from './deployments'
 import {
   readRebasingParityPoolPoolEthBalance,
   readRebasingParityPoolPoolStEthBalance,
@@ -19,10 +22,57 @@ import { ArrowUpDown } from 'lucide-react'
 import { WalletConnect } from '@/components/WalletConnect'
 import { LocalhostButton } from '@/components/LocalhostButton'
 
+// Constants
+const UNIVERSAL_ROUTER = '0xef740bf23acae26f6492b10de645d6b98dc8eaf3'
+const V4_SWAP_COMMAND = '0x10'
+const V4_ACTIONS = '0x060c0f' // SWAP_EXACT_IN_SINGLE(0x06) + SETTLE_ALL(0x0c) + TAKE_ALL(0x0f)
+const SLIPPAGE_TOLERANCE = 0.01 // 1%
+
+// Universal Router ABI for execute function
+const UNIVERSAL_ROUTER_ABI = [
+  {
+    "inputs": [
+      {"internalType": "bytes", "name": "commands", "type": "bytes"},
+      {"internalType": "bytes[]", "name": "inputs", "type": "bytes[]"},
+      {"internalType": "uint256", "name": "deadline", "type": "uint256"}
+    ],
+    "name": "execute",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  }
+] as const
+
+// ERC20 ABI for allowance and approve
+const ERC20_ABI = [
+  {
+    "inputs": [
+      {"internalType": "address", "name": "owner", "type": "address"},
+      {"internalType": "address", "name": "spender", "type": "address"}
+    ],
+    "name": "allowance",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "address", "name": "spender", "type": "address"},
+      {"internalType": "uint256", "name": "amount", "type": "uint256"}
+    ],
+    "name": "approve",
+    "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+] as const
+
 function App() {
   const [fromAmount, setFromAmount] = useState('')
   const [toAmount, setToAmount] = useState('')
   const [isETHToStETH, setIsETHToStETH] = useState(true)
+  const [isSwapping, setIsSwapping] = useState(false)
+  const [swapStatus, setSwapStatus] = useState('')
   
   const { address, isConnected, chain } = useAccount()
   const { data: ethBalance } = useBalance({
@@ -30,7 +80,8 @@ function App() {
   })
 
   // Contract addresses state
-  const [contractAddresses, setContractAddresses] = useState<any>(null)
+  const [contractAddresses, setContractAddresses] = useState<DeploymentAddresses | null>(null)
+  const [poolKeyData, setPoolKeyData] = useState<PoolKeyData | null>(null)
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(true)
   const [addressError, setAddressError] = useState<string | null>(null)
 
@@ -52,7 +103,9 @@ function App() {
       try {
         setAddressError(null)
         const addresses = await getContractAddresses(chain.id)
+        const poolKey = await getPoolKey(chain.id)
         setContractAddresses(addresses)
+        setPoolKeyData(poolKey)
       } catch (err) {
         console.error('Failed to load contract addresses:', err)
         setAddressError('Failed to load contract addresses')
@@ -63,6 +116,34 @@ function App() {
 
     loadAddresses()
   }, [chain?.id])
+
+  // Write contract hook for transactions
+  const { writeContract, data: hash, error: writeError, isPending: isWritePending } = useWriteContract()
+
+  // Wait for transaction receipt
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash,
+  })
+
+  // Monitor transaction status
+  useEffect(() => {
+    if (isConfirming) {
+      console.log('Transaction confirming...', hash)
+      setSwapStatus('Transaction confirming...')
+    }
+    if (isConfirmed) {
+      console.log('Transaction confirmed!', hash)
+      setIsSwapping(false)
+      setSwapStatus('Swap completed successfully!')
+
+      // Reset form after a brief delay to show success message
+      setTimeout(() => {
+        setFromAmount('')
+        setToAmount('')
+        setSwapStatus('')
+      }, 3000)
+    }
+  }, [isConfirming, isConfirmed, hash])
 
   // Generated hooks for contract data
   const { data: poolEthBalance } = readRebasingParityPoolPoolEthBalance({
@@ -135,10 +216,13 @@ function App() {
   }
 
   const handleSwap = async () => {
-    if (!isConnected || !fromAmount || !contractAddresses) {
+    if (!isConnected || !fromAmount || !contractAddresses || !poolKeyData) {
       console.log('Cannot swap - missing requirements')
       return
     }
+
+    setIsSwapping(true)
+    setSwapStatus('')
 
     try {
       console.log('Swap details:', {
@@ -149,16 +233,252 @@ function App() {
         fee: fee,
       })
 
-      // The Uniswap v4 swap flow requires:
-      // 1. Pool must be initialized with PoolManager.initialize()
-      // 2. Use UniversalRouter at 0xef740bf23acae26f6492b10de645d6b98dc8eaf3
-      // 3. Or create a custom swapper contract that calls PoolManager.swap()
+      // Convert amount to wei
+      const amountWei = parseEther(fromAmount)
 
-      alert(`Swap Details:\n\nWould swap ${fromAmount} ${fromToken} for ${toAmount} ${toToken}\n\nPool Status: Not initialized\n\nNext Steps:\n1. Initialize pool via PoolManager\n2. Add initial liquidity\n3. Execute swap through UniversalRouter\n\nUniversalRouter: 0xef740bf23acae26f6492b10de645d6b98dc8eaf3`)
+      if (isETHToStETH) {
+        // ETH -> stETH swap using Universal Router V4_SWAP
+        console.log('Executing ETH -> stETH swap:', {
+          zeroForOne: true,
+          amountSpecified: amountWei.toString(),
+          poolKey: poolKeyData
+        })
+
+        const deadline = Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+
+        try {
+          // V4_SWAP command with actions sequence:
+          // 1. SWAP_EXACT_IN_SINGLE (0x06)
+          // 2. SETTLE_ALL (0x0c) - for input currency (ETH)
+          // 3. TAKE_ALL (0x0f) - for output currency (stETH)
+          const commands = V4_SWAP_COMMAND
+          const actions = V4_ACTIONS
+
+          // Encode the action parameters
+          const actionParams = [
+            // SWAP_EXACT_IN_SINGLE params: (poolKey, zeroForOne, amountIn, amountOutMinimum, hookData)
+            encodeAbiParameters(
+              [
+                {
+                  type: 'tuple',
+                  components: [
+                    { name: 'currency0', type: 'address' },
+                    { name: 'currency1', type: 'address' },
+                    { name: 'fee', type: 'uint24' },
+                    { name: 'tickSpacing', type: 'int24' },
+                    { name: 'hooks', type: 'address' }
+                  ]
+                }, // PoolKey
+                { type: 'bool' },    // zeroForOne
+                { type: 'uint128' }, // amountIn
+                { type: 'uint128' }, // amountOutMinimum
+                { type: 'bytes' }    // hookData
+              ],
+              [
+                poolKeyData,
+                true, // zeroForOne (ETH -> stETH)
+                BigInt(amountWei.toString()),
+                BigInt(Math.floor(parseFloat(toAmount) * 1e18 * (1 - SLIPPAGE_TOLERANCE))), // slippage protection
+                '0x' // empty hook data
+              ]
+            ),
+            // SETTLE_ALL params: (currency)
+            encodeAbiParameters(
+              [{ type: 'address' }], // currency
+              [poolKeyData.currency0] // ETH (0x0000...)
+            ),
+            // TAKE_ALL params: (currency, recipient)
+            encodeAbiParameters(
+              [{ type: 'address' }, { type: 'address' }], // currency, recipient
+              [poolKeyData.currency1, address as `0x${string}`] // stETH, user address
+            )
+          ]
+
+          // Encode the V4_SWAP input: (actions, params)
+          const v4SwapInputs = encodeAbiParameters(
+            [{ type: 'bytes' }, { type: 'bytes[]' }],
+            [actions as `0x${string}`, actionParams]
+          )
+
+          console.log('Executing ETH->stETH swap via Universal Router:', {
+            commands,
+            actions,
+            v4SwapInputs,
+            value: amountWei.toString()
+          })
+
+          await writeContract({
+            address: UNIVERSAL_ROUTER as `0x${string}`,
+            abi: UNIVERSAL_ROUTER_ABI,
+            functionName: 'execute',
+            args: [
+              commands as `0x${string}`,
+              [v4SwapInputs],
+              BigInt(deadline)
+            ],
+            value: amountWei
+          })
+
+          console.log('ETH->stETH swap transaction submitted!')
+
+        } catch (error) {
+          console.error('ETH->stETH swap failed:', error)
+          throw error
+        }
+
+      } else {
+        // stETH -> ETH swap using Universal Router V4_SWAP with approval handling
+        console.log('Executing stETH -> ETH swap:', {
+          zeroForOne: false,
+          amountSpecified: amountWei.toString(),
+          poolKey: poolKeyData
+        })
+
+        const deadline = Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+
+        try {
+          // Check current allowance for stETH
+          setSwapStatus('Checking allowance...')
+          const currentAllowance = await readContract(config, {
+            address: contractAddresses.StETH as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: 'allowance',
+            args: [address as `0x${string}`, UNIVERSAL_ROUTER]
+          })
+
+          // If allowance is insufficient, request approval first
+          if (currentAllowance < BigInt(amountWei.toString())) {
+            console.log('Insufficient allowance, requesting approval...')
+            setSwapStatus('Requesting approval...')
+
+            await writeContract({
+              address: contractAddresses.StETH as `0x${string}`,
+              abi: ERC20_ABI,
+              functionName: 'approve',
+              args: [UNIVERSAL_ROUTER, BigInt(amountWei.toString())]
+            })
+
+            console.log('Approval transaction submitted')
+            setSwapStatus('Approval pending...')
+
+            // Wait for approval confirmation using the hash from the hook
+            if (hash) {
+              await waitForTransactionReceipt(config, { hash })
+              console.log('Approval confirmed')
+              setSwapStatus('Preparing swap...')
+            }
+          }
+
+          // V4_SWAP command with actions sequence:
+          // 1. SWAP_EXACT_IN_SINGLE (0x06)
+          // 2. SETTLE_ALL (0x0c) - for input currency (stETH)
+          // 3. TAKE_ALL (0x0f) - for output currency (ETH)
+          const commands = V4_SWAP_COMMAND
+          const actions = V4_ACTIONS
+
+          // Encode the action parameters
+          const actionParams = [
+            // SWAP_EXACT_IN_SINGLE params: (poolKey, zeroForOne, amountIn, amountOutMinimum, hookData)
+            encodeAbiParameters(
+              [
+                {
+                  type: 'tuple',
+                  components: [
+                    { name: 'currency0', type: 'address' },
+                    { name: 'currency1', type: 'address' },
+                    { name: 'fee', type: 'uint24' },
+                    { name: 'tickSpacing', type: 'int24' },
+                    { name: 'hooks', type: 'address' }
+                  ]
+                }, // PoolKey
+                { type: 'bool' },    // zeroForOne
+                { type: 'uint128' }, // amountIn
+                { type: 'uint128' }, // amountOutMinimum
+                { type: 'bytes' }    // hookData
+              ],
+              [
+                poolKeyData,
+                false, // zeroForOne (false for stETH -> ETH)
+                BigInt(amountWei.toString()),
+                BigInt(Math.floor(parseFloat(toAmount) * 1e18 * (1 - SLIPPAGE_TOLERANCE))), // slippage protection
+                '0x' // empty hook data
+              ]
+            ),
+            // SETTLE_ALL params: (currency)
+            encodeAbiParameters(
+              [{ type: 'address' }], // currency
+              [poolKeyData.currency1] // stETH
+            ),
+            // TAKE_ALL params: (currency, recipient)
+            encodeAbiParameters(
+              [{ type: 'address' }, { type: 'address' }], // currency, recipient
+              [poolKeyData.currency0, address as `0x${string}`] // ETH, user address
+            )
+          ]
+
+          // Encode the V4_SWAP input: (actions, params)
+          const v4SwapInputs = encodeAbiParameters(
+            [{ type: 'bytes' }, { type: 'bytes[]' }],
+            [actions as `0x${string}`, actionParams]
+          )
+
+          console.log('Executing stETH->ETH swap via Universal Router:', {
+            commands,
+            actions,
+            v4SwapInputs
+          })
+
+          setSwapStatus('Executing swap...')
+
+          await writeContract({
+            address: UNIVERSAL_ROUTER as `0x${string}`,
+            abi: UNIVERSAL_ROUTER_ABI,
+            functionName: 'execute',
+            args: [
+              commands as `0x${string}`,
+              [v4SwapInputs],
+              BigInt(deadline)
+            ]
+            // No value needed for stETH -> ETH swap
+          })
+
+          console.log('stETH->ETH swap transaction submitted!')
+
+        } catch (error) {
+          console.error('stETH->ETH swap failed:', error)
+          throw error
+        }
+      }
 
     } catch (error) {
       console.error('Swap failed:', error)
-      alert('Swap failed: ' + (error as Error).message)
+
+      // Improved error handling with specific error messages
+      let errorMessage = 'Unknown error occurred'
+      if (error instanceof Error) {
+        if (error.message.includes('User rejected')) {
+          errorMessage = 'Transaction was rejected by user'
+        } else if (error.message.includes('insufficient funds')) {
+          errorMessage = 'Insufficient funds for transaction'
+        } else if (error.message.includes('allowance')) {
+          errorMessage = 'Token allowance error'
+        } else if (error.message.includes('slippage')) {
+          errorMessage = 'Price slippage too high, try again'
+        } else {
+          errorMessage = error.message
+        }
+      }
+
+      setSwapStatus(`Error: ${errorMessage}`)
+
+      // Clear error status after 5 seconds
+      setTimeout(() => {
+        setSwapStatus('')
+      }, 5000)
+
+    } finally {
+      setIsSwapping(false)
+      // Don't clear swapStatus immediately in finally block, let it show for errors
     }
   }
 
@@ -253,17 +573,23 @@ function App() {
               <Button
                 className="w-full"
                 size="lg"
-                disabled={!isConnected || !fromAmount || isLoadingAddresses || !contractAddresses}
+                disabled={!isConnected || !fromAmount || isLoadingAddresses || !contractAddresses || !poolKeyData || isSwapping || isWritePending || isConfirming}
                 onClick={handleSwap}
               >
                 {!isConnected
                   ? 'Connect Wallet to Swap'
                   : isLoadingAddresses
                   ? 'Loading Contracts...'
-                  : !contractAddresses
+                  : !contractAddresses || !poolKeyData
                   ? 'Contracts Not Deployed'
                   : !fromAmount
                   ? 'Enter Amount'
+                  : isWritePending
+                  ? 'Confirm in Wallet...'
+                  : isConfirming
+                  ? 'Transaction Confirming...'
+                  : isSwapping
+                  ? (swapStatus || 'Preparing Swap...')
                   : `Swap ${fromToken} for ${toToken}`
                 }
               </Button>
@@ -284,6 +610,57 @@ function App() {
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
                     LP Balance: {formatBalance(lpBalance)} tokens
+                  </p>
+                </div>
+              )}
+
+              {/* Transaction Status */}
+              {hash && (
+                <div className={`p-3 rounded-lg border ${
+                  isConfirmed ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'
+                }`}>
+                  <p className={`text-sm ${isConfirmed ? 'text-green-600' : 'text-blue-600'}`}>
+                    {isConfirmed ? '✅ Swap Complete!' : '⏳ Transaction Pending...'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Hash: {hash.slice(0, 10)}...{hash.slice(-8)}
+                  </p>
+                </div>
+              )}
+
+              {/* Swap Status Indicator */}
+              {swapStatus && (
+                <div className={`p-3 rounded-lg border ${
+                  swapStatus.includes('Error')
+                    ? 'bg-red-50 border-red-200'
+                    : swapStatus.includes('completed successfully')
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-blue-50 border-blue-200'
+                }`}>
+                  <p className={`text-sm ${
+                    swapStatus.includes('Error')
+                      ? 'text-red-600'
+                      : swapStatus.includes('completed successfully')
+                      ? 'text-green-600'
+                      : 'text-blue-600'
+                  }`}>
+                    {swapStatus.includes('Error')
+                      ? '❌'
+                      : swapStatus.includes('completed successfully')
+                      ? '✅'
+                      : '⏳'
+                    } {swapStatus}
+                  </p>
+                </div>
+              )}
+
+              {writeError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600">
+                    ❌ Transaction Failed
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {writeError.message}
                   </p>
                 </div>
               )}
