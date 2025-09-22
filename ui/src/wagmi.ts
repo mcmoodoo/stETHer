@@ -2,9 +2,9 @@ import { http, createConfig } from 'wagmi'
 import { mainnet, sepolia, localhost } from 'wagmi/chains'
 import { injected, metaMask } from 'wagmi/connectors'
 
-// Define Unichain mainnet (supports both 130 and 1300 chain IDs)
+// Define local Unichain fork (using localhost chain ID)
 const unichain = {
-  id: 1300, // Use wallet's chain ID
+  id: 31337, // Standard localhost chain ID for development
   name: 'Unichain',
   nativeCurrency: {
     decimals: 18,

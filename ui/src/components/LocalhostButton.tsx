@@ -2,7 +2,7 @@ import { useChainId, useSwitchChain } from 'wagmi'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-const UNICHAIN_FORK_ID = 1300 // Our forked Unichain chain ID
+const UNICHAIN_FORK_ID = 31337 // Standard localhost chain ID for development
 
 export function LocalhostButton() {
   const chainId = useChainId()
