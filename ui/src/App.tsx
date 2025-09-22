@@ -247,63 +247,65 @@ function App() {
         const deadline = Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
 
         try {
-          // V4_SWAP command with actions sequence:
-          // 1. SWAP_EXACT_IN_SINGLE (0x06)
-          // 2. SETTLE_ALL (0x0c) - for input currency (ETH)
-          // 3. TAKE_ALL (0x0f) - for output currency (stETH)
+          // V4_SWAP command with proper Universal Router encoding
           const commands = V4_SWAP_COMMAND
-          const actions = V4_ACTIONS
 
-          // Encode the action parameters
-          const actionParams = [
-            // SWAP_EXACT_IN_SINGLE params: (poolKey, zeroForOne, amountIn, amountOutMinimum, hookData)
-            encodeAbiParameters(
-              [
-                {
-                  type: 'tuple',
-                  components: [
-                    { name: 'currency0', type: 'address' },
-                    { name: 'currency1', type: 'address' },
-                    { name: 'fee', type: 'uint24' },
-                    { name: 'tickSpacing', type: 'int24' },
-                    { name: 'hooks', type: 'address' }
-                  ]
-                }, // PoolKey
-                { type: 'bool' },    // zeroForOne
-                { type: 'uint128' }, // amountIn
-                { type: 'uint128' }, // amountOutMinimum
-                { type: 'bytes' }    // hookData
-              ],
-              [
-                poolKeyData,
-                true, // zeroForOne (ETH -> stETH)
-                BigInt(amountWei.toString()),
-                BigInt(Math.floor(parseFloat(toAmount) * 1e18 * (1 - SLIPPAGE_TOLERANCE))), // slippage protection
-                '0x' // empty hook data
-              ]
-            ),
-            // SETTLE_ALL params: (currency)
-            encodeAbiParameters(
-              [{ type: 'address' }], // currency
-              [poolKeyData.currency0] // ETH (0x0000...)
-            ),
-            // TAKE_ALL params: (currency, recipient)
-            encodeAbiParameters(
-              [{ type: 'address' }, { type: 'address' }], // currency, recipient
-              [poolKeyData.currency1, address as `0x${string}`] // stETH, user address
-            )
-          ]
+          // Encode actions sequence
+          const actions = V4_ACTIONS // 0x060c0f
 
-          // Encode the V4_SWAP input: (actions, params)
-          const v4SwapInputs = encodeAbiParameters(
+          // Encode swap parameters following Universal Router format
+          const swapParams = encodeAbiParameters(
+            [
+              {
+                type: 'tuple',
+                components: [
+                  { name: 'currency0', type: 'address' },
+                  { name: 'currency1', type: 'address' },
+                  { name: 'fee', type: 'uint24' },
+                  { name: 'tickSpacing', type: 'int24' },
+                  { name: 'hooks', type: 'address' }
+                ]
+              }, // PoolKey
+              { type: 'bool' },    // zeroForOne
+              { type: 'uint128' }, // amountIn
+              { type: 'uint128' }, // amountOutMinimum
+              { type: 'bytes' }    // hookData
+            ],
+            [
+              poolKeyData,
+              true, // zeroForOne (ETH -> stETH)
+              BigInt(amountWei.toString()),
+              BigInt(Math.floor(parseFloat(toAmount) * 1e18 * (1 - SLIPPAGE_TOLERANCE))), // slippage protection
+              '0x' // empty hook data
+            ]
+          )
+
+          // Encode parameters for SETTLE_ALL and TAKE_ALL actions
+          // SETTLE_ALL: (Currency currency, uint256 maxAmount)
+          const settleParams = encodeAbiParameters(
+            [{ type: 'address' }, { type: 'uint256' }],
+            [poolKeyData.currency0, BigInt(amountWei.toString())] // ETH, maxAmount
+          )
+
+          // TAKE_ALL: (Currency currency, uint256 minAmount)
+          const takeParams = encodeAbiParameters(
+            [{ type: 'address' }, { type: 'uint256' }],
+            [poolKeyData.currency1, BigInt(Math.floor(parseFloat(toAmount) * 1e18 * (1 - SLIPPAGE_TOLERANCE)))] // stETH, minAmount
+          )
+
+          // Universal Router V4_SWAP expects: (bytes actions, bytes[] params)
+          // Where params is an array of encoded parameters for each action
+          const actionParamsArray = [swapParams, settleParams, takeParams]
+
+          const v4SwapInput = encodeAbiParameters(
             [{ type: 'bytes' }, { type: 'bytes[]' }],
-            [actions as `0x${string}`, actionParams]
+            [actions as `0x${string}`, actionParamsArray]
           )
 
           console.log('Executing ETH->stETH swap via Universal Router:', {
             commands,
             actions,
-            v4SwapInputs,
+            v4SwapInput,
             value: amountWei.toString()
           })
 
@@ -313,7 +315,7 @@ function App() {
             functionName: 'execute',
             args: [
               commands as `0x${string}`,
-              [v4SwapInputs],
+              [v4SwapInput],
               BigInt(deadline)
             ],
             value: amountWei
@@ -369,63 +371,65 @@ function App() {
             }
           }
 
-          // V4_SWAP command with actions sequence:
-          // 1. SWAP_EXACT_IN_SINGLE (0x06)
-          // 2. SETTLE_ALL (0x0c) - for input currency (stETH)
-          // 3. TAKE_ALL (0x0f) - for output currency (ETH)
+          // V4_SWAP command with proper Universal Router encoding
           const commands = V4_SWAP_COMMAND
-          const actions = V4_ACTIONS
 
-          // Encode the action parameters
-          const actionParams = [
-            // SWAP_EXACT_IN_SINGLE params: (poolKey, zeroForOne, amountIn, amountOutMinimum, hookData)
-            encodeAbiParameters(
-              [
-                {
-                  type: 'tuple',
-                  components: [
-                    { name: 'currency0', type: 'address' },
-                    { name: 'currency1', type: 'address' },
-                    { name: 'fee', type: 'uint24' },
-                    { name: 'tickSpacing', type: 'int24' },
-                    { name: 'hooks', type: 'address' }
-                  ]
-                }, // PoolKey
-                { type: 'bool' },    // zeroForOne
-                { type: 'uint128' }, // amountIn
-                { type: 'uint128' }, // amountOutMinimum
-                { type: 'bytes' }    // hookData
-              ],
-              [
-                poolKeyData,
-                false, // zeroForOne (false for stETH -> ETH)
-                BigInt(amountWei.toString()),
-                BigInt(Math.floor(parseFloat(toAmount) * 1e18 * (1 - SLIPPAGE_TOLERANCE))), // slippage protection
-                '0x' // empty hook data
-              ]
-            ),
-            // SETTLE_ALL params: (currency)
-            encodeAbiParameters(
-              [{ type: 'address' }], // currency
-              [poolKeyData.currency1] // stETH
-            ),
-            // TAKE_ALL params: (currency, recipient)
-            encodeAbiParameters(
-              [{ type: 'address' }, { type: 'address' }], // currency, recipient
-              [poolKeyData.currency0, address as `0x${string}`] // ETH, user address
-            )
-          ]
+          // Encode actions sequence
+          const actions = V4_ACTIONS // 0x060c0f
 
-          // Encode the V4_SWAP input: (actions, params)
-          const v4SwapInputs = encodeAbiParameters(
+          // Encode swap parameters following Universal Router format
+          const swapParams = encodeAbiParameters(
+            [
+              {
+                type: 'tuple',
+                components: [
+                  { name: 'currency0', type: 'address' },
+                  { name: 'currency1', type: 'address' },
+                  { name: 'fee', type: 'uint24' },
+                  { name: 'tickSpacing', type: 'int24' },
+                  { name: 'hooks', type: 'address' }
+                ]
+              }, // PoolKey
+              { type: 'bool' },    // zeroForOne
+              { type: 'uint128' }, // amountIn
+              { type: 'uint128' }, // amountOutMinimum
+              { type: 'bytes' }    // hookData
+            ],
+            [
+              poolKeyData,
+              false, // zeroForOne (false for stETH -> ETH)
+              BigInt(amountWei.toString()),
+              BigInt(Math.floor(parseFloat(toAmount) * 1e18 * (1 - SLIPPAGE_TOLERANCE))), // slippage protection
+              '0x' // empty hook data
+            ]
+          )
+
+          // Encode parameters for SETTLE_ALL and TAKE_ALL actions
+          // SETTLE_ALL: (Currency currency, uint256 maxAmount)
+          const settleParams = encodeAbiParameters(
+            [{ type: 'address' }, { type: 'uint256' }],
+            [poolKeyData.currency1, BigInt(amountWei.toString())] // stETH, maxAmount
+          )
+
+          // TAKE_ALL: (Currency currency, uint256 minAmount)
+          const takeParams = encodeAbiParameters(
+            [{ type: 'address' }, { type: 'uint256' }],
+            [poolKeyData.currency0, BigInt(Math.floor(parseFloat(toAmount) * 1e18 * (1 - SLIPPAGE_TOLERANCE)))] // ETH, minAmount
+          )
+
+          // Universal Router V4_SWAP expects: (bytes actions, bytes[] params)
+          // Where params is an array of encoded parameters for each action
+          const actionParamsArray = [swapParams, settleParams, takeParams]
+
+          const v4SwapInput = encodeAbiParameters(
             [{ type: 'bytes' }, { type: 'bytes[]' }],
-            [actions as `0x${string}`, actionParams]
+            [actions as `0x${string}`, actionParamsArray]
           )
 
           console.log('Executing stETH->ETH swap via Universal Router:', {
             commands,
             actions,
-            v4SwapInputs
+            v4SwapInput
           })
 
           setSwapStatus('Executing swap...')
@@ -436,7 +440,7 @@ function App() {
             functionName: 'execute',
             args: [
               commands as `0x${string}`,
-              [v4SwapInputs],
+              [v4SwapInput],
               BigInt(deadline)
             ]
             // No value needed for stETH -> ETH swap

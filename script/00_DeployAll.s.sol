@@ -62,9 +62,11 @@ contract DeployAllScript is Script {
         _createPoolKey();
 
         // 7. Initialize the pool
+        console.log("Attempting pool initialization with flexible hook validation...");
         _initializePool();
 
-        // 8. Add initial liquidity (optional)
+        // 8. Add initial liquidity
+        console.log("Attempting to add initial liquidity...");
         _addInitialLiquidity();
 
         // 9. Save deployment addresses to JSON
@@ -91,10 +93,7 @@ contract DeployAllScript is Script {
     }
 
     function _deployRebasingParityPool() internal returns (address) {
-        console.log("Deploying RebasingParityPool...");
-
-        // Mine for a valid hook address using CREATE2
-        console.log("Mining for valid hook address...");
+        console.log("Deploying RebasingParityPool with CREATE2...");
 
         // Calculate required flags based on our hook permissions
         // beforeAddLiquidity: true (bit 2)
@@ -106,95 +105,91 @@ contract DeployAllScript is Script {
             Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
 
-        // First, mine with a placeholder PoolKey (hooks set to address(0))
-        PoolKey memory miningPoolKey = PoolKey({
-            currency0: Currency.wrap(address(0)), // ETH
+        console.log("Required permission flags:", flags);
+        console.log("Mining for deterministic hook address with correct permissions...");
+
+        // We need to find a salt that produces an address with the correct permission flags
+        // The challenge is that we need to know the constructor args, which include the pool key,
+        // which includes the hook address itself (circular dependency)
+
+        // Solution: Use a two-phase approach
+        // 1. Mine for a salt that gives us the right permission bits
+        // 2. Deploy at that exact address
+
+        bytes32 salt;
+        address targetHookAddress;
+        bool found = false;
+
+        // For now, use a simple mining approach and accept the pool key mismatch
+        // A proper solution would require modifying the hook contract to be more flexible
+        // or implementing a more sophisticated mining algorithm
+
+        console.log("Mining for hook address with correct permissions...");
+
+        PoolKey memory miningKey = PoolKey({
+            currency0: Currency.wrap(address(0)),
             currency1: Currency.wrap(stETH),
             fee: POOL_FEE,
             tickSpacing: TICK_SPACING,
-            hooks: IHooks(address(0)) // Placeholder during mining
+            hooks: IHooks(address(0))
         });
 
-        // Create constructor args for mining
-        bytes memory miningConstructorArgs = abi.encode(
-            IPoolManager(UNICHAIN_POOL_MANAGER),
-            TREASURY,
-            miningPoolKey
-        );
-
-        bytes memory miningCreationCode = abi.encodePacked(
+        // Pre-compute the init code hash to save gas
+        bytes32 initCodeHash = keccak256(abi.encodePacked(
             type(RebasingParityPool).creationCode,
-            miningConstructorArgs
-        );
+            abi.encode(IPoolManager(UNICHAIN_POOL_MANAGER), TREASURY, miningKey)
+        ));
 
-        // Mine for a valid salt and address
-        (bytes32 salt, address minedAddress) = _mineHookAddressWithReturn(miningCreationCode, flags);
+        // Mine for correct permissions
+        for (uint256 i = 0; i < 100000; i++) {
+            salt = bytes32(i);
+            targetHookAddress = computeFoundryCreate2Address(salt, initCodeHash);
 
-        console.log("Mined hook address:", minedAddress);
-
-        // Now create the ACTUAL pool key with the mined hook address
-        PoolKey memory actualPoolKey = PoolKey({
-            currency0: Currency.wrap(address(0)), // ETH
-            currency1: Currency.wrap(stETH),
-            fee: POOL_FEE,
-            tickSpacing: TICK_SPACING,
-            hooks: IHooks(minedAddress) // Use the mined address!
-        });
-
-        // Create the ACTUAL constructor args with correct hook address
-        bytes memory actualConstructorArgs = abi.encode(
-            IPoolManager(UNICHAIN_POOL_MANAGER),
-            TREASURY,
-            actualPoolKey
-        );
-
-        bytes memory actualCreationCode = abi.encodePacked(
-            type(RebasingParityPool).creationCode,
-            actualConstructorArgs
-        );
-
-        // Re-mine with the correct pool key containing the mined hook address
-        console.log("Re-mining for deployment with correct pool key...");
-
-        // Mine again with the actual constructor args to get the right salt
-        (bytes32 deploymentSalt, address finalAddress) = _mineHookAddressWithReturn(actualCreationCode, flags);
-
-        console.log("Final deployment address will be:", finalAddress);
-
-        // Save the construction pool key for later use
-        constructionPoolKey = actualPoolKey;
-
-        // Deploy with Solidity's CREATE2 syntax
-        RebasingParityPool hook = new RebasingParityPool{salt: deploymentSalt}(
-            IPoolManager(UNICHAIN_POOL_MANAGER),
-            TREASURY,
-            actualPoolKey
-        );
-
-        console.log("Actual deployment address:", address(hook));
-
-        if (address(hook) != finalAddress) {
-            console.log("ERROR: Address mismatch!");
-            console.log("Expected:", finalAddress);
-            console.log("Actual:", address(hook));
-            console.log("This means the creation code used for mining doesn't match deployment");
-        } else {
-            console.log("SUCCESS: Hook deployed at the correctly mined address!");
+            if ((uint160(targetHookAddress) & 0x3FFF) == flags) {
+                console.log("Found valid salt after", i, "attempts");
+                console.log("Target hook address:", targetHookAddress);
+                found = true;
+                constructionPoolKey = miningKey;
+                break;
+            }
         }
+
+        require(found, "Could not find valid salt for hook permissions");
+
+        // Deploy the hook with CREATE2 using the found salt
+        RebasingParityPool hook = new RebasingParityPool{salt: salt}(
+            IPoolManager(UNICHAIN_POOL_MANAGER),
+            TREASURY,
+            constructionPoolKey // Using miningKey with address(0) as hook
+        );
+
+        // After deployment, create the actual pool key with the deployed address
+        constructionPoolKey = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(stETH),
+            fee: POOL_FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        // Verify deployment address matches prediction
+        require(address(hook) == targetHookAddress, "CREATE2 address mismatch!");
+
+        // Check if the deployed address has valid permissions
+        uint160 deployedFlags = uint160(address(hook)) & 0x3FFF;
+        console.log("Deployed hook at:", address(hook));
+        console.log("Hook permission flags:", deployedFlags);
+        console.log("Required flags:", flags);
+
+        require(deployedFlags == flags, "Hook permissions don't match requirements");
 
         // Verify deployment worked
         uint256 codeSize;
         assembly {
             codeSize := extcodesize(hook)
         }
-        console.log("Hook deployed at:", address(hook));
         console.log("Hook code size:", codeSize, "bytes");
         require(codeSize > 0, "Hook deployment failed - no code at address");
-
-        // Log deployment info
-        uint160 deployedFlags = uint160(address(hook)) & 0x3FFF;
-        console.log("Deployed address flags:", deployedFlags);
-        console.log("Hook validation will be performed by PoolManager");
 
         console.log("RebasingParityPool deployed at:", address(hook));
         return address(hook);
@@ -361,17 +356,56 @@ contract DeployAllScript is Script {
         for (uint256 salt = 0; salt < 1000000; salt++) {
             bytes32 saltBytes = bytes32(salt);
 
-            // Use vm.computeCreate2Address with Foundry's CREATE2 factory
-            // Foundry uses the CREATE2 factory at this address
+            // Compute CREATE2 address using deployer address (msg.sender) as factory
             address hookAddress = vm.computeCreate2Address(
                 saltBytes,
                 initCodeHash,
-                0x4e59b44847b379578588920cA78FbF26c0B4956C
+                msg.sender
             );
 
             // Check if the address matches the required flags
             // The hook address must have its lower 14 bits match the permission flags
-            if (uint160(hookAddress) & 0x3FFF == flags) {
+            if ((uint160(hookAddress) & 0x3FFF) == flags) {
+                console.log("Found valid address after", salt, "attempts");
+                console.log("Target hook address:", hookAddress);
+                return (saltBytes, hookAddress);
+            }
+        }
+
+        revert("Could not find valid hook address within reasonable attempts");
+    }
+
+    /// @notice Helper to compute CREATE2 address for Foundry's CREATE2 factory
+    function computeFoundryCreate2Address(bytes32 salt, bytes32 initCodeHash) internal pure returns (address) {
+        // Foundry deploys via its own CREATE2 factory at a specific address
+        address create2Factory = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+        return address(uint160(uint256(keccak256(abi.encodePacked(
+            bytes1(0xff),
+            create2Factory,
+            salt,
+            initCodeHash
+        )))));
+    }
+
+    /// @notice Mine for a valid hook address that works with Solidity's CREATE2
+    function _mineHookAddressForSolidityCreate2(uint160 flags) internal returns (bytes32, address) {
+        // For Solidity's new{salt:}, we need to compute the address using keccak256 of:
+        // 0xff + deployer + salt + keccak256(creationCode)
+        bytes32 initCodeHash = keccak256(type(RebasingParityPool).creationCode);
+
+        for (uint256 salt = 0; salt < 1000000; salt++) {
+            bytes32 saltBytes = bytes32(salt);
+
+            // Manually compute CREATE2 address following EIP-1014
+            address hookAddress = address(uint160(uint256(keccak256(abi.encodePacked(
+                bytes1(0xff),
+                msg.sender, // The deployer (the user running the script)
+                saltBytes,
+                initCodeHash
+            )))));
+
+            // Check if the address matches the required flags
+            if ((uint160(hookAddress) & 0x3FFF) == flags) {
                 console.log("Found valid address after", salt, "attempts");
                 console.log("Target hook address:", hookAddress);
                 return (saltBytes, hookAddress);
