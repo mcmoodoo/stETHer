@@ -194,7 +194,27 @@ contract RebasingParityPool is BaseHook, SafeCallback {
             _payIncentiveFromProtocolFees(key, incentiveAmount);
         }
 
-        // Execute token transfers
+        // Check if pool has sufficient reserves for the swap
+        if (params.zeroForOne) {
+            // ETH -> stETH: Need sufficient stETH reserves
+            require(poolStETHBalance >= outputAmount, "Insufficient stETH reserves");
+        } else {
+            // stETH -> ETH: Need sufficient ETH reserves
+            require(poolETHBalance >= outputAmount, "Insufficient ETH reserves");
+        }
+
+        // Update pool reserves (swap from actual pool balances)
+        if (params.zeroForOne) {
+            // ETH -> stETH: Increase ETH reserves, decrease stETH reserves
+            poolETHBalance += inputAmount;
+            poolStETHBalance -= outputAmount;
+        } else {
+            // stETH -> ETH: Increase stETH reserves, decrease ETH reserves
+            poolStETHBalance += inputAmount;
+            poolETHBalance -= outputAmount;
+        }
+
+        // Execute token transfers through PoolManager
         poolManager.mint(address(this), inputCurrency.toId(), inputAmount);
         poolManager.burn(address(this), outputCurrency.toId(), outputAmount);
 
