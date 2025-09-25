@@ -4,5 +4,8 @@
       "name": "v1.1.0",
       "rev": "e59fe72c110c3862eec9b332530dce49ca506bbb"
     }
+  },
+  "lib/universal-router": {
+    "rev": "3663f6d"
   }
 }

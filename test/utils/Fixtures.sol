@@ -36,8 +36,18 @@ contract Fixtures is Deployers, DeployPermit2 {
     }
 
     function seedBalance(address to) internal {
-        IERC20(Currency.unwrap(currency0)).transfer(to, STARTING_USER_BALANCE);
-        IERC20(Currency.unwrap(currency1)).transfer(to, STARTING_USER_BALANCE);
+        // Handle ETH (native token) differently from ERC20
+        if (Currency.unwrap(currency0) == address(0)) {
+            vm.deal(to, STARTING_USER_BALANCE);
+        } else {
+            IERC20(Currency.unwrap(currency0)).transfer(to, STARTING_USER_BALANCE);
+        }
+
+        if (Currency.unwrap(currency1) == address(0)) {
+            vm.deal(to, STARTING_USER_BALANCE);
+        } else {
+            IERC20(Currency.unwrap(currency1)).transfer(to, STARTING_USER_BALANCE);
+        }
     }
 
     function approvePosm() internal {
@@ -46,6 +56,11 @@ contract Fixtures is Deployers, DeployPermit2 {
     }
 
     function approvePosmCurrency(Currency currency) internal {
+        // Skip approval for ETH (native token)
+        if (Currency.unwrap(currency) == address(0)) {
+            return;
+        }
+
         // Because POSM uses permit2, we must execute 2 permits/approvals.
         // 1. First, the caller must approve permit2 on the token.
         IERC20(Currency.unwrap(currency)).approve(address(permit2), type(uint256).max);

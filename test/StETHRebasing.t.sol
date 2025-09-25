@@ -57,26 +57,26 @@ contract StETHRebasingTest is Test {
     function test_continuousRebasing() public {
         // Mint tokens
         stETH.mint(user1, 100 ether);
-        
+
         uint256 initialBalance = stETH.balanceOf(user1);
-        
+
         // Fast forward 30 days and rebase
-        vm.warp(block.timestamp + 30 days);
-        stETH.rebase();
+        vm.warp(30 days + 1);  // Start at timestamp 1, so 30 days later is 30 days + 1
+        uint256 yield1 = stETH.rebase();
         uint256 balanceAfter30Days = stETH.balanceOf(user1);
-        
-        // Fast forward another 30 days and rebase
-        vm.warp(block.timestamp + 30 days);
-        stETH.rebase();
+
+        // Fast forward to 60 days total and rebase
+        vm.warp(60 days + 1);  // 60 days from start
+        uint256 yield2 = stETH.rebase();
         uint256 balanceAfter60Days = stETH.balanceOf(user1);
-        
+
+        console.log("Initial balance:", initialBalance);
+        console.log("After 30 days - yield:", yield1, "balance:", balanceAfter30Days);
+        console.log("After 60 days - yield:", yield2, "balance:", balanceAfter60Days);
+
         // Balance should continuously increase
         assertGt(balanceAfter30Days, initialBalance);
-        assertGt(balanceAfter60Days, balanceAfter30Days);
-        
-        console.log("Initial balance:", initialBalance);
-        console.log("After 30 days:", balanceAfter30Days);
-        console.log("After 60 days:", balanceAfter60Days);
+        assertGt(balanceAfter60Days, balanceAfter30Days, "Balance should increase after second rebase");
     }
     
     function test_sharePreservationAfterRebase() public {

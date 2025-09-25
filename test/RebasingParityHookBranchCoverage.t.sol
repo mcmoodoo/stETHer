@@ -11,15 +11,38 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {RebasingParityPool} from "../src/RebasingParityPool.sol";
 import {ProtocolRevenue} from "../src/ProtocolRevenue.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
+import {StETH} from "../src/StETH.sol";
 
 contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
     RebasingParityPool hook;
     ProtocolRevenue protocolRevenue;
     address treasury = address(0x999);
+    StETH stETH;
 
     function setUp() public {
         deployFreshManagerAndRouters();
-        deployMintAndApprove2Currencies();
+
+        // Deploy stETH and set up ETH/stETH pair
+        stETH = new StETH();
+        currency0 = Currency.wrap(address(0)); // ETH
+        currency1 = Currency.wrap(address(stETH)); // stETH
+
+        // Mint stETH to test contracts
+        stETH.mint(address(this), 10_000_000 ether);
+        stETH.mint(address(swapRouter), 10_000_000 ether);
+        stETH.mint(address(modifyLiquidityRouter), 10_000_000 ether);
+
+        // Deal ETH to test contracts
+        vm.deal(address(this), 10_000_000 ether);
+        vm.deal(address(swapRouter), 10_000_000 ether);
+        vm.deal(address(modifyLiquidityRouter), 10_000_000 ether);
+
+        // Approve stETH for routers
+
+        stETH.approve(address(swapRouter), type(uint256).max);
+
+        stETH.approve(address(modifyLiquidityRouter), type(uint256).max);
+
         deployAndApprovePosm(manager);
 
         // Deploy protocol revenue contract
@@ -30,13 +53,16 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
             uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG)
                 ^ (0x4449 << 144)
         );
-        // Create the pool key first (before deploying hook)
-        key = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
 
-        bytes memory constructorArgs = abi.encode(manager, treasury, key);
+        // Create pool key with flags address for constructor
+        PoolKey memory constructorKey = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
+        bytes memory constructorArgs = abi.encode(manager, treasury, constructorKey);
         deployCodeTo("RebasingParityPool.sol:RebasingParityPool", constructorArgs, flags);
 
         hook = RebasingParityPool(flags);
+
+        // Update key with actual hook address and initialize
+        key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
         manager.initialize(key, SQRT_PRICE_1_1);
     }
 
@@ -45,9 +71,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // Add liquidity to create balanced pool
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Perform very small swap to keep pool perfectly balanced (0% fee)
         uint256 swapAmount = 1e18; // Minimal amount
@@ -73,9 +99,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // Add liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Perform small exact output swap
         uint256 outputAmount = 1e18; // Minimal amount
@@ -102,9 +128,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // Add liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Create imbalance to trigger incentive need (this will generate protocol fees)
         uint256 largeSwapAmount = 500e18;
@@ -135,9 +161,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // Add liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Create significant imbalance by draining most ETH
         uint256 drainAmount = 900e18;
@@ -172,9 +198,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // Add liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        uint256 lpTokens = hook.addLiquidity(key, liquidityAmount);
+        uint256 lpTokens = hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Try to remove more tokens than owned
         vm.expectRevert("Insufficient LP tokens");
@@ -188,9 +214,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // Add liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Generate protocol fees first
         uint256 feeGeneratingSwap = 300e18;
@@ -224,9 +250,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
         // Alternative approach: test through legitimate unlock flow
         uint256 liquidityAmount = 1000e18;
 
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // This internally calls _unlockCallback with the pool manager as sender
         // If it succeeds, we know the access control is working
@@ -241,9 +267,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
     function test_minimalSwapAmounts() public {
         uint256 liquidityAmount = 1000e18;
 
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Test minimal swap amounts (1 wei)
         uint256 minSwap = 1;
@@ -264,9 +290,9 @@ contract RebasingParityPoolBranchCoverageTest is Test, Fixtures {
     function test_dynamicFeeCalculation_variousImbalances() public {
         uint256 liquidityAmount = 1000e18;
 
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Test various imbalance levels
         uint256[] memory swapAmounts = new uint256[](5);

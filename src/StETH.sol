@@ -90,30 +90,35 @@ contract StETH {
     /// @return yieldGenerated Amount of new tokens created from yield
     function rebase() public returns (uint256 yieldGenerated) {
         uint256 timeSinceLastRebase = block.timestamp - lastRebaseTime;
-        
+
         if (timeSinceLastRebase == 0) {
             return 0; // No time passed
         }
-        
+
         uint256 currentSupply = totalSupply;
         if (currentSupply == 0) {
+            lastRebaseTime = block.timestamp;
             return 0; // No tokens to rebase
         }
-        
+
         // Calculate yield based on time elapsed and 5% APY
         // yield = principal × (rate/10000) × (timeElapsed/secondsPerYear)
-        yieldGenerated = (currentSupply * ANNUAL_YIELD_BPS * timeSinceLastRebase) 
-                        / (BPS_DENOMINATOR * SECONDS_PER_YEAR);
-        
+        // Using higher precision to avoid rounding to 0
+        uint256 numerator = currentSupply * ANNUAL_YIELD_BPS * timeSinceLastRebase;
+        uint256 denominator = BPS_DENOMINATOR * SECONDS_PER_YEAR;
+        yieldGenerated = numerator / denominator;
+
+        // Always update lastRebaseTime to prevent stuck rebases
+        lastRebaseTime = block.timestamp;
+
         if (yieldGenerated > 0) {
             // Increase total supply without changing shares
             // This effectively increases the value of each share
             totalSupply += yieldGenerated;
-            lastRebaseTime = block.timestamp;
-            
+
             emit Rebase(totalSupply, yieldGenerated, block.timestamp);
         }
-        
+
         return yieldGenerated;
     }
     

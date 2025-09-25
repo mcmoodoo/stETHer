@@ -11,14 +11,35 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {RebasingParityPool} from "../src/RebasingParityPool.sol";
 import {ParityLP} from "../src/ParityLP.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
+import {StETH} from "../src/StETH.sol";
 
 contract LPTokensTest is Test, Fixtures {
     RebasingParityPool hook;
     ParityLP lpToken;
+    StETH stETH;
 
     function setUp() public {
         deployFreshManagerAndRouters();
-        deployMintAndApprove2Currencies();
+
+        // Deploy stETH and set up ETH/stETH pair
+        stETH = new StETH();
+        currency0 = Currency.wrap(address(0)); // ETH
+        currency1 = Currency.wrap(address(stETH)); // stETH
+
+        // Mint stETH to test contracts
+        stETH.mint(address(this), 10_000_000 ether);
+        stETH.mint(address(swapRouter), 10_000_000 ether);
+        stETH.mint(address(modifyLiquidityRouter), 10_000_000 ether);
+
+        // Deal ETH to test contracts
+        vm.deal(address(this), 10_000_000 ether);
+        vm.deal(address(swapRouter), 10_000_000 ether);
+        vm.deal(address(modifyLiquidityRouter), 10_000_000 ether);
+
+        // Approve stETH for routers
+        stETH.approve(address(swapRouter), type(uint256).max);
+        stETH.approve(address(modifyLiquidityRouter), type(uint256).max);
+
         deployAndApprovePosm(manager);
 
         address flags = address(
@@ -42,12 +63,12 @@ contract LPTokensTest is Test, Fixtures {
 
     function test_addLiquidity_mintsLPTokens() public {
         uint256 liquidityAmount = 1000e18;
-        
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+
+        // ETH doesn't need approval, only stETH
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
         
         uint256 lpTokensBefore = lpToken.balanceOf(address(this));
-        uint256 lpTokensMinted = hook.addLiquidity(key, liquidityAmount);
+        uint256 lpTokensMinted = hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         uint256 lpTokensAfter = lpToken.balanceOf(address(this));
         
         assertEq(lpTokensMinted, 2000e18); // 2 * liquidityAmount for first LP
@@ -61,19 +82,19 @@ contract LPTokensTest is Test, Fixtures {
         uint256 secondAmount = 500e18;
         
         // First LP
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), firstAmount);
+        // ETH doesn't need approval
         IERC20(Currency.unwrap(currency1)).approve(address(hook), firstAmount);
-        uint256 firstLPTokens = hook.addLiquidity(key, firstAmount);
+        uint256 firstLPTokens = hook.addLiquidity{value: firstAmount}(key, firstAmount);
         
         // Second LP (different address)
         address secondLP = address(0x123);
-        deal(Currency.unwrap(currency0), secondLP, secondAmount);
-        deal(Currency.unwrap(currency1), secondLP, secondAmount);
+        vm.deal(secondLP, secondAmount); // Deal ETH
+        deal(Currency.unwrap(currency1), secondLP, secondAmount); // Deal stETH
         
         vm.startPrank(secondLP);
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), secondAmount);
+        // ETH doesn't need approval
         IERC20(Currency.unwrap(currency1)).approve(address(hook), secondAmount);
-        uint256 secondLPTokens = hook.addLiquidity(key, secondAmount);
+        uint256 secondLPTokens = hook.addLiquidity{value: secondAmount}(key, secondAmount);
         vm.stopPrank();
         
         // Verify proportional shares
@@ -91,9 +112,9 @@ contract LPTokensTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
         
         // Add liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        uint256 lpTokensMinted = hook.addLiquidity(key, liquidityAmount);
+        uint256 lpTokensMinted = hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         
         // Remove half the liquidity
         uint256 lpTokensToRemove = lpTokensMinted / 2;
@@ -122,9 +143,9 @@ contract LPTokensTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
         
         // Add liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
+        // ETH doesn't need approval
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        uint256 lpTokensMinted = hook.addLiquidity(key, liquidityAmount);
+        uint256 lpTokensMinted = hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         
         // Generate fees through swaps
         uint256 swapAmount = 100e18;

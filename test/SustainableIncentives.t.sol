@@ -12,8 +12,10 @@ import {RebasingParityPool} from "../src/RebasingParityPool.sol";
 import {ParityLP} from "../src/ParityLP.sol";
 import {ProtocolRevenue} from "../src/ProtocolRevenue.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
+import {StETH} from "../src/StETH.sol";
 
 contract SustainableIncentivesTest is Test, Fixtures {
+    StETH stETH;
     RebasingParityPool hook;
     ParityLP lpToken;
     ProtocolRevenue protocolRevenue;
@@ -21,22 +23,58 @@ contract SustainableIncentivesTest is Test, Fixtures {
 
     function setUp() public {
         deployFreshManagerAndRouters();
-        deployMintAndApprove2Currencies();
+
+        // Deploy stETH and set up ETH/stETH pair
+
+        stETH = new StETH();
+
+        currency0 = Currency.wrap(address(0)); // ETH
+
+        currency1 = Currency.wrap(address(stETH)); // stETH
+
+
+
+        // Mint stETH to test contracts
+
+        stETH.mint(address(this), 10_000_000 ether);
+
+        stETH.mint(address(swapRouter), 10_000_000 ether);
+
+        stETH.mint(address(modifyLiquidityRouter), 10_000_000 ether);
+
+
+
+        // Deal ETH to test contracts
+
+        vm.deal(address(this), 10_000_000 ether);
+
+        vm.deal(address(swapRouter), 10_000_000 ether);
+
+        vm.deal(address(modifyLiquidityRouter), 10_000_000 ether);
+
+        // Approve stETH for routers
+
+        stETH.approve(address(swapRouter), type(uint256).max);
+
+        stETH.approve(address(modifyLiquidityRouter), type(uint256).max);
         deployAndApprovePosm(manager);
 
         address flags = address(
             uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG)
                 ^ (0x4451 << 144)
         );
-        // Create the pool key first (before deploying hook)
-        key = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
 
-        bytes memory constructorArgs = abi.encode(manager, treasury, key);
+        // Create pool key with flags address for constructor
+        PoolKey memory constructorKey = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
+        bytes memory constructorArgs = abi.encode(manager, treasury, constructorKey);
         deployCodeTo("RebasingParityPool.sol:RebasingParityPool", constructorArgs, flags);
 
         hook = RebasingParityPool(flags);
         lpToken = hook.LP_TOKEN();
         protocolRevenue = ProtocolRevenue(hook.getProtocolRevenue());
+
+        // Update key with actual hook address and initialize
+        key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
         manager.initialize(key, SQRT_PRICE_1_1);
     }
 
@@ -44,9 +82,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
         
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         
         // First, verify no protocol fees exist
         uint256 protocolFees = hook.getProtocolFees(Currency.unwrap(currency1));
@@ -80,9 +117,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
         
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         
         // Generate protocol fees through stETH → ETH swaps
         uint256 feeGeneratingSwap = 200e18;
@@ -126,9 +162,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 2000e18;
         
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         
         // Generate significant protocol fees
         for (uint i = 0; i < 5; i++) {
@@ -175,9 +210,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
         
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         
         // Simulate trading cycle: fees accumulate, then incentives are paid
         for (uint cycle = 0; cycle < 3; cycle++) {
@@ -216,9 +250,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
         
         // LP adds liquidity (starts balanced)
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         
         // Generate some protocol fees but keep pool balanced
         swap(key, false, -int256(100e18), ZERO_BYTES); // stETH → ETH
@@ -256,9 +289,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
         
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
         
         // Generate very small amount of protocol fees
         swap(key, false, -int256(10e18), ZERO_BYTES); // Very small fee-generating swap
@@ -310,9 +342,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        uint256 lpTokensMinted = hook.addLiquidity(key, liquidityAmount);
+        uint256 lpTokensMinted = hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Generate fees through swaps (stETH → ETH with dynamic fees)
         uint256 swapAmount = 100e18;
@@ -341,9 +372,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Generate fees
         uint256 swapAmount = 200e18;
@@ -379,19 +409,17 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount2 = 500e18;
 
         // First LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount1);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount1);
-        uint256 lpTokens1 = hook.addLiquidity(key, liquidityAmount1);
+        uint256 lpTokens1 = hook.addLiquidity{value: liquidityAmount1}(key, liquidityAmount1);
 
         // Second LP adds liquidity
         address secondLP = address(0x123);
-        deal(Currency.unwrap(currency0), secondLP, liquidityAmount2);
+        vm.deal(secondLP, liquidityAmount2); // Deal ETH
         deal(Currency.unwrap(currency1), secondLP, liquidityAmount2);
 
         vm.startPrank(secondLP);
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount2);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount2);
-        uint256 lpTokens2 = hook.addLiquidity(key, liquidityAmount2);
+        uint256 lpTokens2 = hook.addLiquidity{value: liquidityAmount2}(key, liquidityAmount2);
         vm.stopPrank();
 
         // Generate fees
@@ -417,9 +445,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        uint256 lpTokensMinted = hook.addLiquidity(key, liquidityAmount);
+        uint256 lpTokensMinted = hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Generate fees
         uint256 swapAmount = 150e18;
@@ -460,9 +487,8 @@ contract SustainableIncentivesTest is Test, Fixtures {
         uint256 liquidityAmount = 2000e18;
 
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Track fee accumulation across multiple swaps
         uint256[] memory swapAmounts = new uint256[](4);

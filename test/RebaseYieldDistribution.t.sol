@@ -14,31 +14,63 @@ import {StETH} from "../src/StETH.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
 contract RebaseYieldDistributionTest is Test, Fixtures {
+    StETH stETH;
     RebasingParityPool hook;
     ParityLP lpToken;
-    StETH stETH;
 
     function setUp() public {
         deployFreshManagerAndRouters();
-        deployMintAndApprove2Currencies();
-        deployAndApprovePosm(manager);
 
-        // Deploy StETH as currency1 for rebasing tests
+        // Deploy stETH and set up ETH/stETH pair
+
         stETH = new StETH();
-        currency1 = Currency.wrap(address(stETH));
+
+        currency0 = Currency.wrap(address(0)); // ETH
+
+        currency1 = Currency.wrap(address(stETH)); // stETH
+
+
+
+        // Mint stETH to test contracts
+
+        stETH.mint(address(this), 10_000_000 ether);
+
+        stETH.mint(address(swapRouter), 10_000_000 ether);
+
+        stETH.mint(address(modifyLiquidityRouter), 10_000_000 ether);
+
+
+
+        // Deal ETH to test contracts
+
+        vm.deal(address(this), 10_000_000 ether);
+
+        vm.deal(address(swapRouter), 10_000_000 ether);
+
+        vm.deal(address(modifyLiquidityRouter), 10_000_000 ether);
+
+        // Approve stETH for routers
+
+        stETH.approve(address(swapRouter), type(uint256).max);
+
+        stETH.approve(address(modifyLiquidityRouter), type(uint256).max);
+        deployAndApprovePosm(manager);
 
         address flags = address(
             uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG)
                 ^ (0x4448 << 144)
         );
-        // Create the pool key first (before deploying hook)
-        key = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
 
-        bytes memory constructorArgs = abi.encode(manager, address(0x999), key); // treasury address
+        // Create pool key with flags address for constructor
+        PoolKey memory constructorKey = PoolKey(currency0, currency1, 3000, 60, IHooks(flags));
+        bytes memory constructorArgs = abi.encode(manager, address(0x999), constructorKey); // treasury address
         deployCodeTo("RebasingParityPool.sol:RebasingParityPool", constructorArgs, flags);
 
         hook = RebasingParityPool(flags);
         lpToken = hook.LP_TOKEN();
+
+        // Update key with actual hook address and initialize
+        key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
         manager.initialize(key, SQRT_PRICE_1_1);
 
         // Mint some stETH for testing
@@ -50,8 +82,7 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Check initial pool balances
         uint256 initialETHBalance = hook.poolETHBalance();
@@ -116,8 +147,7 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // First rebase period (6 months)
         vm.warp(block.timestamp + 182 days);
@@ -158,19 +188,17 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
         uint256 liquidityAmount2 = 500e18;
 
         // First LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount1);
-        hook.addLiquidity(key, liquidityAmount1);
+        hook.addLiquidity{value: liquidityAmount1}(key, liquidityAmount1);
         uint256 lpTokens1 = lpToken.balanceOf(address(this));
 
         // Second LP adds liquidity
         address secondLP = address(0x123);
-        deal(Currency.unwrap(currency0), secondLP, liquidityAmount2);
+        vm.deal(secondLP, liquidityAmount2); // Deal ETH
         deal(address(stETH), secondLP, liquidityAmount2);
 
         vm.startPrank(secondLP);
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount2);
         stETH.approve(address(hook), liquidityAmount2);
-        hook.addLiquidity(key, liquidityAmount2);
+        hook.addLiquidity{value: liquidityAmount2}(key, liquidityAmount2);
         uint256 lpTokens2 = lpToken.balanceOf(secondLP);
         vm.stopPrank();
 
@@ -210,8 +238,7 @@ contract RebaseYieldDistributionTest is Test, Fixtures {
         uint256 liquidityAmount = 1000e18;
 
         // LP adds liquidity
-        IERC20(Currency.unwrap(currency0)).approve(address(hook), liquidityAmount);
-        hook.addLiquidity(key, liquidityAmount);
+        hook.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
 
         // Simulate rebasing
         vm.warp(block.timestamp + 365 days);
