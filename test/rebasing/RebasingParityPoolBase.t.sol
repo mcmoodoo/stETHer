@@ -28,42 +28,57 @@ contract RebasingParityPoolTestBase is Test {
     address treasury = address(0x999);
 
     uint160 constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
+    address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
 
     function setUp() public virtual {
         stETH = new StETH();
         protocolRevenue = new ProtocolRevenue(treasury);
         poolManager = new PoolManager(owner);
 
-        uint160 flags = uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_SWAP_FLAG);
+        // Hook must have these specific flags encoded in the address
+        uint160 flags = uint160(
+            Hooks.BEFORE_ADD_LIQUIDITY_FLAG |
+            Hooks.BEFORE_SWAP_FLAG |
+            Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
+        );
 
-        rebasingParityPool = new RebasingParityPool(
+        // Mine a salt that will produce a hook address with the correct flags
+        bytes memory constructorArgs = abi.encode(poolManager, address(protocolRevenue));
+        (address hookAddress, bytes32 salt) = HookMiner.find(
+            address(this),
+            flags,
+            type(RebasingParityPool).creationCode,
+            constructorArgs
+        );
+
+        // Log the number of iterations (salt is the iteration count)
+        console2.log("Hook mining iterations:", uint256(salt));
+        console2.log("Hook address:", hookAddress);
+
+        // Deploy the hook using CREATE2 from the test contract
+        rebasingParityPool = new RebasingParityPool{salt: salt}(
             poolManager,
             address(protocolRevenue)
         );
 
-        bytes memory constructorArgs = abi.encode(poolManager);
-        
-        console2.logBytes(constructorArgs);
+        require(address(rebasingParityPool) == hookAddress, "Hook address mismatch");
 
-        (address hookAddress, bytes32 salt) = HookMiner.find(address(this), flags, type(RebasingParityPool).creationCode, constructorArgs);
+        // Create pool key with the deployed hook
+        key = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(address(stETH)),
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(rebasingParityPool))
+        });
 
-        assertEq(hookAddress & 0x888, 0x888);
+        // Initialize the pool
+        poolManager.initialize(key, SQRT_PRICE_1_1);
 
-        // key = PoolKey({
-        //     currency0: Currency.wrap(address(0)),
-        //     currency1: Currency.wrap(address(stETH)),
-        //     fee: 3000,
-        //     tickSpacing: 60,
-        //     hooks: IHooks(address(0))
-        // });
-        //
-        // key.hooks = IHooks(address(rebasingParityPool));
-        //
-        // poolManager.initialize(key, SQRT_PRICE_1_1);
-        //
-        // vm.deal(alice, 100 ether);
-        // vm.deal(bob, 100 ether);
-        // stETH.mint(alice, 100 ether);
-        // stETH.mint(bob, 100 ether);
+        // Fund test accounts
+        vm.deal(alice, 100 ether);
+        vm.deal(bob, 100 ether);
+        stETH.mint(alice, 100 ether);
+        stETH.mint(bob, 100 ether);
     }
 }
