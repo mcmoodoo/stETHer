@@ -15,7 +15,7 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
-contract RebasingParityPoolTestBase is Test {
+contract RebasingParityPoolTest is Test {
     StETH stETH;
     RebasingParityPool rebasingParityPool;
     ProtocolRevenue protocolRevenue;
