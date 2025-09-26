@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Script, console} from "forge-std/Script.sol";
+import {stdJson} from "forge-std/StdJson.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolManager} from "v4-core/src/PoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -18,9 +19,13 @@ import {ProtocolRevenue} from "../src/ProtocolRevenue.sol";
 
 contract DeployAllScript is Script {
     using CurrencyLibrary for Currency;
+    using stdJson for string;
 
-    // Deployment addresses
-    address payable public constant UNICHAIN_POOL_MANAGER = payable(0x1F98400000000000000000000000000000000004);
+    // Deployment addresses - loaded from JSON
+    address payable public UNICHAIN_POOL_MANAGER;
+    address public POSITION_MANAGER;
+    address public UNIVERSAL_ROUTER;
+    address public PERMIT2;
     address public stETH;
     address public protocolRevenue;
     address public rebasingParityPool;
@@ -37,6 +42,9 @@ contract DeployAllScript is Script {
     address public constant TREASURY = 0x1234567890123456789012345678901234567890;
 
     function run() external {
+        // Load deployment addresses from JSON
+        _loadDeploymentAddresses();
+
         vm.startBroadcast();
 
         console.log("=== Deploying All Contracts ===");
@@ -75,6 +83,24 @@ contract DeployAllScript is Script {
         console.log("=== Deployment Complete ===");
 
         vm.stopBroadcast();
+    }
+
+    function _loadDeploymentAddresses() internal {
+        string memory json = vm.readFile("./uniswap-deployments.json");
+
+        // Read Unichain addresses (chainId: 130)
+        string memory unichainPath = ".mainnet.Unichain.contracts";
+
+        UNICHAIN_POOL_MANAGER = payable(json.readAddress(string.concat(unichainPath, ".PoolManager")));
+        POSITION_MANAGER = json.readAddress(string.concat(unichainPath, ".PositionManager"));
+        UNIVERSAL_ROUTER = json.readAddress(string.concat(unichainPath, ".UniversalRouter"));
+        PERMIT2 = json.readAddress(string.concat(unichainPath, ".Permit2"));
+
+        console.log("Loaded addresses from uniswap-deployments.json:");
+        console.log("- PoolManager:", UNICHAIN_POOL_MANAGER);
+        console.log("- PositionManager:", POSITION_MANAGER);
+        console.log("- UniversalRouter:", UNIVERSAL_ROUTER);
+        console.log("- Permit2:", PERMIT2);
     }
 
 
