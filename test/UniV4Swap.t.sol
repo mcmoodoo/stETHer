@@ -59,7 +59,10 @@ contract UniV4Swap is Test {
     );
 
     function setUp() public {
-        vm.selectFork(vm.createFork(vm.envString("ETH_RPC_URL")));
+        // Fork at specific block for consistent caching
+        // Run with: forge test --match-contract UniV4Swap --offline (after initial cache)
+        vm.selectFork(vm.createFork(vm.envString("INFURA_ETHEREUM_MAINNET_RPC"), 23443437));
+
 
         vm.label(UNIVERSAL_ROUTER_ADDRESS, "UNIVERSAL_ROUTER");
         vm.label(POOL_MANAGER_ADDRESS, "POOL_MANAGER");
