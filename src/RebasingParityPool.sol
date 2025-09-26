@@ -70,8 +70,8 @@ contract RebasingParityPool is BaseHook, SafeCallback {
     /// @notice Protocol revenue management
     ProtocolRevenue public immutable PROTOCOL_REVENUE;
 
-    /// @notice The only pool this hook is allowed to manage
-    PoolId public immutable allowedPoolId;
+    /// @notice The only pool this hook is allowed to manage (set on first use)
+    PoolId public allowedPoolId;
     
     /// @notice Track individual token balances in the pool
     uint256 public poolETHBalance;      // ETH balance in pool
@@ -94,10 +94,10 @@ contract RebasingParityPool is BaseHook, SafeCallback {
     event RebaseYieldDistributed(uint256 yieldAmount, uint256 timestamp);
     event PoolBalancesUpdated(uint256 ethBalance, uint256 stethBalance);
 
-    constructor(IPoolManager poolManager_, address treasury, PoolKey memory allowedPoolKey) SafeCallback(poolManager_) {
+    constructor(IPoolManager poolManager_, address treasury) SafeCallback(poolManager_) {
         LP_TOKEN = new ParityLP(address(this));
         PROTOCOL_REVENUE = new ProtocolRevenue(treasury);
-        allowedPoolId = allowedPoolKey.toId();
+        // allowedPoolId will be set on first use
     }
 
 
@@ -105,18 +105,24 @@ contract RebasingParityPool is BaseHook, SafeCallback {
         return poolManager;
     }
 
-    /// @notice Modifier to ensure only compatible pools can use this hook
-    /// @dev Validates pool parameters instead of exact pool ID to handle deployment flexibility
+    /// @notice Modifier to ensure only the allowed pool can use this hook
+    /// @dev Sets the allowed pool ID on first use, then validates exact pool ID match
     modifier onlyAllowedPool(PoolKey calldata key) {
-        // Validate that this hook is being used with the correct pool parameters
-        require(address(key.hooks) == address(this), "Hook: wrong hook address");
-        require(Currency.unwrap(key.currency0) == address(0), "Hook: currency0 must be ETH");
-        require(key.fee == 3000, "Hook: fee must be 0.3%");
-        require(key.tickSpacing == 60, "Hook: wrong tick spacing");
+        PoolId poolId = key.toId();
 
-        // For currency1, check if it matches our expected stETH address
-        // We can be flexible here since stETH address might vary between deployments
-        require(Currency.unwrap(key.currency1) != address(0), "Hook: currency1 cannot be zero");
+        // If this is the first use, set the allowed pool ID
+        if (PoolId.unwrap(allowedPoolId) == bytes32(0)) {
+            // Basic validation for first pool
+            require(address(key.hooks) == address(this), "Hook: wrong hook address");
+            require(Currency.unwrap(key.currency0) == address(0), "Hook: currency0 must be ETH");
+            require(Currency.unwrap(key.currency1) != address(0), "Hook: currency1 cannot be zero");
+
+            // Set the allowed pool ID
+            allowedPoolId = poolId;
+        }
+
+        // Always check exact pool ID match
+        require(PoolId.unwrap(poolId) == PoolId.unwrap(allowedPoolId), "Hook: unauthorized pool");
         _;
     }
 

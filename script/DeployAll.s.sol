@@ -185,8 +185,7 @@ contract DeployAllScript is Script {
         // Deploy the hook with CREATE2 using the found salt
         RebasingParityPool hook = new RebasingParityPool{salt: salt}(
             IPoolManager(UNICHAIN_POOL_MANAGER),
-            TREASURY,
-            constructionPoolKey // Using miningKey with address(0) as hook
+            TREASURY
         );
 
         // After deployment, create the actual pool key with the deployed address
