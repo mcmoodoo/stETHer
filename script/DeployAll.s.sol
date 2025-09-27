@@ -4,17 +4,14 @@ pragma solidity ^0.8.26;
 import {Script, console} from "forge-std/Script.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
-import {PoolManager} from "v4-core/src/PoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
-import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 
 import {StETH} from "../src/StETH.sol";
 import {RebasingParityPool} from "../src/RebasingParityPool.sol";
-import {ParityLP} from "../src/ParityLP.sol";
 import {ProtocolRevenue} from "../src/ProtocolRevenue.sol";
 
 contract DeployAllScript is Script {
@@ -122,9 +119,9 @@ contract DeployAllScript is Script {
         console.log("Deploying RebasingParityPool with CREATE2...");
 
         // Calculate required flags based on our hook permissions
-        // beforeAddLiquidity: true (bit 2)
-        // beforeSwap: true (bit 6)
-        // beforeSwapReturnDelta: true (bit 10)
+        // beforeAddLiquidity: true (bit 11)
+        // beforeSwap: true (bit 7)
+        // beforeSwapReturnDelta: true (bit 3)
         uint160 flags = uint160(
             Hooks.BEFORE_ADD_LIQUIDITY_FLAG |
             Hooks.BEFORE_SWAP_FLAG |
@@ -163,7 +160,7 @@ contract DeployAllScript is Script {
         // Pre-compute the init code hash to save gas
         bytes32 initCodeHash = keccak256(abi.encodePacked(
             type(RebasingParityPool).creationCode,
-            abi.encode(IPoolManager(UNICHAIN_POOL_MANAGER), TREASURY, miningKey)
+            abi.encode(IPoolManager(UNICHAIN_POOL_MANAGER), TREASURY)
         ));
 
         // Mine for correct permissions
@@ -347,58 +344,6 @@ contract DeployAllScript is Script {
         return string(abi.encodePacked("chain-", vm.toString(chainId)));
     }
 
-    /// @notice Mine for a valid hook address that matches the required permissions
-    function _mineHookAddress(bytes memory creationCode, uint160 flags) internal returns (bytes32) {
-        bytes32 initCodeHash = keccak256(creationCode);
-
-        for (uint256 salt = 0; salt < 1000000; salt++) {
-            bytes32 saltBytes = bytes32(salt);
-
-            // Use vm.computeCreate2Address with Foundry's CREATE2 factory
-            // Foundry uses the CREATE2 factory at this address
-            address hookAddress = vm.computeCreate2Address(
-                saltBytes,
-                initCodeHash,
-                0x4e59b44847b379578588920cA78FbF26c0B4956C
-            );
-
-            // Check if the address matches the required flags
-            // The hook address must have its lower 14 bits match the permission flags
-            if (uint160(hookAddress) & 0x3FFF == flags) {
-                console.log("Found valid address after", salt, "attempts");
-                console.log("Target hook address:", hookAddress);
-                return saltBytes;
-            }
-        }
-
-        revert("Could not find valid hook address within reasonable attempts");
-    }
-
-    /// @notice Mine for a valid hook address and return both salt and address
-    function _mineHookAddressWithReturn(bytes memory creationCode, uint160 flags) internal returns (bytes32, address) {
-        bytes32 initCodeHash = keccak256(creationCode);
-
-        for (uint256 salt = 0; salt < 1000000; salt++) {
-            bytes32 saltBytes = bytes32(salt);
-
-            // Compute CREATE2 address using deployer address (msg.sender) as factory
-            address hookAddress = vm.computeCreate2Address(
-                saltBytes,
-                initCodeHash,
-                msg.sender
-            );
-
-            // Check if the address matches the required flags
-            // The hook address must have its lower 14 bits match the permission flags
-            if ((uint160(hookAddress) & 0x3FFF) == flags) {
-                console.log("Found valid address after", salt, "attempts");
-                console.log("Target hook address:", hookAddress);
-                return (saltBytes, hookAddress);
-            }
-        }
-
-        revert("Could not find valid hook address within reasonable attempts");
-    }
 
     /// @notice Helper to compute CREATE2 address for Foundry's CREATE2 factory
     function computeFoundryCreate2Address(bytes32 salt, bytes32 initCodeHash) internal pure returns (address) {
@@ -410,33 +355,5 @@ contract DeployAllScript is Script {
             salt,
             initCodeHash
         )))));
-    }
-
-    /// @notice Mine for a valid hook address that works with Solidity's CREATE2
-    function _mineHookAddressForSolidityCreate2(uint160 flags) internal returns (bytes32, address) {
-        // For Solidity's new{salt:}, we need to compute the address using keccak256 of:
-        // 0xff + deployer + salt + keccak256(creationCode)
-        bytes32 initCodeHash = keccak256(type(RebasingParityPool).creationCode);
-
-        for (uint256 salt = 0; salt < 1000000; salt++) {
-            bytes32 saltBytes = bytes32(salt);
-
-            // Manually compute CREATE2 address following EIP-1014
-            address hookAddress = address(uint160(uint256(keccak256(abi.encodePacked(
-                bytes1(0xff),
-                msg.sender, // The deployer (the user running the script)
-                saltBytes,
-                initCodeHash
-            )))));
-
-            // Check if the address matches the required flags
-            if ((uint160(hookAddress) & 0x3FFF) == flags) {
-                console.log("Found valid address after", salt, "attempts");
-                console.log("Target hook address:", hookAddress);
-                return (saltBytes, hookAddress);
-            }
-        }
-
-        revert("Could not find valid hook address within reasonable attempts");
     }
 }
