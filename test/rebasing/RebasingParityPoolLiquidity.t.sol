@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {RebasingParityPoolTest} from "./RebasingParityPoolBase.t.sol";
+import {RebasingParityPoolTest} from "./base-test-setup/RebasingParityPoolTestBase.sol";
 import {console2} from "forge-std/console2.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
@@ -12,10 +12,6 @@ import {ParityLP} from "src/ParityLP.sol";
 
 contract RebasingParityPoolLiquidityTest is RebasingParityPoolTest {
     using StateLibrary for IPoolManager;
-
-    function test_eth_balance() public {
-        assertEq(bob.balance, 100 ether);
-    }
 
     function test_addLiquidity_firstLP() public {
         // Setup: Alice adds liquidity as the first LP

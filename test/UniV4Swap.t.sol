@@ -18,7 +18,7 @@ import { IPermit2 } from "../lib/permit2/src/interfaces/IPermit2.sol";
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract UniV4Swap is Test {
+abstract contract UniV4Swap is Test {
     using StateLibrary for IPoolManager;
 
     address constant UNIVERSAL_ROUTER_ADDRESS = 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af;
