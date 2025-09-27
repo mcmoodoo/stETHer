@@ -151,4 +151,182 @@ contract RebasingParityPoolLiquidityTest is RebasingParityPoolTest {
 
         vm.stopPrank();
     }
+
+    function test_removeLiquidity_fullWithdrawal() public {
+        // First, Alice adds liquidity
+        vm.startPrank(alice);
+        uint256 aliceAmount = 10 ether;
+        stETH.approve(address(rebasingParityPool), aliceAmount);
+        uint256 lpTokensReceived = rebasingParityPool.addLiquidity{value: aliceAmount}(key, aliceAmount);
+
+        // Get LP token contract
+        ParityLP lpToken = ParityLP(address(rebasingParityPool.LP_TOKEN()));
+
+        // Track balances before removal
+        uint256 aliceETHBefore = alice.balance;
+        uint256 aliceStETHBefore = stETH.balanceOf(alice);
+        uint256 aliceLPBefore = lpToken.balanceOf(alice);
+        uint256 poolETHBefore = rebasingParityPool.poolETHBalance();
+        uint256 poolStETHBefore = rebasingParityPool.poolStETHBalance();
+
+        assertEq(aliceLPBefore, lpTokensReceived, "LP balance should match received tokens");
+        assertEq(poolETHBefore, aliceAmount, "Pool should have ETH");
+        assertEq(poolStETHBefore, aliceAmount, "Pool should have stETH");
+
+        // Remove all liquidity
+        (uint256 amount0, uint256 amount1) = rebasingParityPool.removeLiquidity(key, lpTokensReceived);
+
+        // Assertions after full withdrawal
+
+        // 1. Verify LP tokens burned
+        assertEq(lpToken.balanceOf(alice), 0, "All LP tokens should be burned");
+        assertEq(lpToken.totalSupply(), 0, "Total LP supply should be 0");
+
+        // 2. Verify user received back their tokens
+        assertEq(alice.balance, aliceETHBefore + amount0, "Alice should receive ETH back");
+        assertEq(stETH.balanceOf(alice), aliceStETHBefore + amount1, "Alice should receive stETH back");
+
+        // 3. Verify amounts match deposited amounts (no fees in this scenario)
+        assertEq(amount0, aliceAmount, "Should receive back all ETH");
+        assertEq(amount1, aliceAmount, "Should receive back all stETH");
+
+        // 4. Verify pool is empty
+        assertEq(rebasingParityPool.poolETHBalance(), 0, "Pool ETH balance should be 0");
+        assertEq(rebasingParityPool.poolStETHBalance(), 0, "Pool stETH balance should be 0");
+        assertEq(rebasingParityPool.poolStETHPrincipal(), 0, "Pool stETH principal should be 0");
+        assertEq(rebasingParityPool.totalLiquidity(), 0, "Total liquidity should be 0");
+
+        console2.log("Full withdrawal completed:");
+        console2.log("  LP tokens burned:", lpTokensReceived);
+        console2.log("  ETH received:", amount0);
+        console2.log("  stETH received:", amount1);
+
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidity_partialWithdrawal() public {
+        // First, Alice adds liquidity
+        vm.startPrank(alice);
+        uint256 aliceAmount = 20 ether;
+        stETH.approve(address(rebasingParityPool), aliceAmount);
+        uint256 lpTokensReceived = rebasingParityPool.addLiquidity{value: aliceAmount}(key, aliceAmount);
+
+        // Get LP token contract
+        ParityLP lpToken = ParityLP(address(rebasingParityPool.LP_TOKEN()));
+
+        // Track balances before partial removal
+        uint256 aliceETHBefore = alice.balance;
+        uint256 aliceStETHBefore = stETH.balanceOf(alice);
+        uint256 aliceLPBefore = lpToken.balanceOf(alice);
+        uint256 poolETHBefore = rebasingParityPool.poolETHBalance();
+        uint256 poolStETHBefore = rebasingParityPool.poolStETHBalance();
+        uint256 poolPrincipalBefore = rebasingParityPool.poolStETHPrincipal();
+
+        // Remove 25% of liquidity (10 out of 40 LP tokens)
+        uint256 lpTokensToRemove = lpTokensReceived / 4; // 25%
+        (uint256 amount0, uint256 amount1) = rebasingParityPool.removeLiquidity(key, lpTokensToRemove);
+
+        // Calculate expected amounts (25% of pool)
+        uint256 expectedETH = aliceAmount / 4;
+        uint256 expectedStETH = aliceAmount / 4;
+
+        // Assertions after partial withdrawal
+
+        // 1. Verify correct LP tokens burned
+        assertEq(lpToken.balanceOf(alice), aliceLPBefore - lpTokensToRemove, "Should have 75% LP tokens left");
+        assertEq(lpToken.totalSupply(), lpTokensReceived - lpTokensToRemove, "Total supply should decrease by 25%");
+
+        // 2. Verify user received correct amounts
+        assertEq(alice.balance, aliceETHBefore + amount0, "Alice should receive 25% ETH");
+        assertEq(stETH.balanceOf(alice), aliceStETHBefore + amount1, "Alice should receive 25% stETH");
+        assertEq(amount0, expectedETH, "ETH amount should be 25% of pool");
+        assertEq(amount1, expectedStETH, "stETH amount should be 25% of pool");
+
+        // 3. Verify pool still has remaining liquidity (75%)
+        assertEq(rebasingParityPool.poolETHBalance(), poolETHBefore - expectedETH, "Pool should have 75% ETH left");
+        assertEq(rebasingParityPool.poolStETHBalance(), poolStETHBefore - expectedStETH, "Pool should have 75% stETH left");
+        assertEq(rebasingParityPool.poolStETHPrincipal(), poolPrincipalBefore - expectedStETH, "Principal should decrease proportionally");
+
+        // 4. Verify total liquidity
+        uint256 remainingLiquidity = (aliceAmount - expectedETH) + (aliceAmount - expectedStETH);
+        assertEq(rebasingParityPool.totalLiquidity(), remainingLiquidity, "Total liquidity should be 75% of original");
+
+        console2.log("Partial withdrawal (25%) completed:");
+        console2.log("  LP tokens burned:", lpTokensToRemove);
+        console2.log("  LP tokens remaining:", lpToken.balanceOf(alice));
+        console2.log("  ETH received:", amount0);
+        console2.log("  stETH received:", amount1);
+        console2.log("  Pool ETH remaining:", rebasingParityPool.poolETHBalance());
+        console2.log("  Pool stETH remaining:", rebasingParityPool.poolStETHBalance());
+
+        // Now remove another 50% of original (20 out of original 40 LP tokens)
+        uint256 secondRemoval = lpTokensReceived / 2;
+        (uint256 amount0_2, uint256 amount1_2) = rebasingParityPool.removeLiquidity(key, secondRemoval);
+
+        // Verify second removal
+        assertEq(lpToken.balanceOf(alice), lpTokensReceived - lpTokensToRemove - secondRemoval, "Should have 25% LP tokens left");
+        assertEq(amount0_2, aliceAmount / 2, "Second removal should get 50% of original ETH");
+        assertEq(amount1_2, aliceAmount / 2, "Second removal should get 50% of original stETH");
+
+        console2.log("Second partial withdrawal (50% of original) completed:");
+        console2.log("  Additional ETH received:", amount0_2);
+        console2.log("  Additional stETH received:", amount1_2);
+        console2.log("  LP tokens remaining after second removal:", lpToken.balanceOf(alice));
+
+        vm.stopPrank();
+    }
+
+    function test_addLiquidity_onlyETH_reverts() public {
+        // Test that providing only ETH without stETH approval/balance fails
+        vm.startPrank(alice);
+
+        uint256 liquidityAmount = 10 ether;
+
+        // Do NOT approve stETH - this should cause the transaction to fail
+        // when the hook tries to transfer stETH from alice
+
+        // Attempt to add liquidity with only ETH (no stETH approval)
+        vm.expectRevert("ERC20: transfer amount exceeds allowance");
+        rebasingParityPool.addLiquidity{value: liquidityAmount}(key, liquidityAmount);
+
+        console2.log("Correctly reverted when trying to add liquidity with only ETH");
+
+        vm.stopPrank();
+    }
+
+    function test_addLiquidity_zeroAmount_reverts() public {
+        // Test that adding zero liquidity reverts
+        vm.startPrank(alice);
+
+        // Even with approval, zero amount should fail
+        stETH.approve(address(rebasingParityPool), type(uint256).max);
+
+        // Try to add zero liquidity - should revert when minting 0 LP tokens
+        vm.expectRevert(); // May revert with division by zero or similar
+        rebasingParityPool.addLiquidity{value: 0}(key, 0);
+
+        console2.log("Correctly reverted when trying to add zero liquidity");
+
+        vm.stopPrank();
+    }
+
+    function test_addLiquidity_mismatchedETHAmount_reverts() public {
+        // Test that sending wrong ETH amount via msg.value fails
+        vm.startPrank(alice);
+
+        uint256 expectedAmount = 10 ether;
+        uint256 wrongETHAmount = 5 ether; // Send less ETH than expected
+
+        // Approve correct stETH amount
+        stETH.approve(address(rebasingParityPool), expectedAmount);
+
+        // Try to add liquidity with mismatched ETH amount
+        // The poolManager.settle() will fail because msg.value doesn't match amountPerToken
+        vm.expectRevert(); // PoolManager will revert on settle with wrong value
+        rebasingParityPool.addLiquidity{value: wrongETHAmount}(key, expectedAmount);
+
+        console2.log("Correctly reverted when ETH amount doesn't match amountPerToken");
+
+        vm.stopPrank();
+    }
 }
