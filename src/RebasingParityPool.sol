@@ -12,6 +12,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {SafeCast} from "v4-core/src/libraries/SafeCast.sol";
+import {CurrencySettler} from "../lib/uniswap-hooks/src/utils/CurrencySettler.sol";
 import {ParityLP} from "./ParityLP.sol";
 import {ProtocolRevenue} from "./ProtocolRevenue.sol";
 
@@ -19,6 +20,7 @@ contract RebasingParityPool is BaseHook, SafeCallback {
     using SafeCast for uint256;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
+    using CurrencySettler for Currency;
 
     // ============ Constants ============
 
@@ -220,31 +222,28 @@ contract RebasingParityPool is BaseHook, SafeCallback {
             poolETHBalance -= outputAmount;
         }
 
-        // Execute token transfers through PoolManager
-        // The hook's internal pool receives input currency and gives output currency
-        // Mint input currency to hook (PoolManager accounting: hook gains input)
-        poolManager.mint(address(this), inputCurrency.toId(), inputAmount);
-        // Burn output currency from hook (PoolManager accounting: hook loses output)
-        poolManager.burn(address(this), outputCurrency.toId(), outputAmount);
-
-        // Calculate and return delta following the same pattern as BaseCustomCurve
-        BeforeSwapDelta returnDelta;
-
-        // Determine which currency is specified and which is unspecified
+        // Follow BaseCustomCurve pattern exactly: determine specified/unspecified currencies and amounts
         (Currency specified, Currency unspecified) =
             (params.zeroForOne == isExactInput) ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
 
         uint256 specifiedAmount = isExactInput ? inputAmount : outputAmount;
         uint256 unspecifiedAmount = isExactInput ? outputAmount : inputAmount;
 
+
+        // Hook must take/settle its own balance to support the deltas it returns
+        // For swaps: hook gives output currency (take), hook receives input currency (settle)
+        BeforeSwapDelta returnDelta;
         if (isExactInput) {
-            // For exact input: user pays specified amount, receives unspecified amount
+            // Hook receives input currency, gives output currency
+            specified.settle(poolManager, address(this), specifiedAmount, true);   // Hook receives specified currency
+            unspecified.take(poolManager, address(this), unspecifiedAmount, true); // Hook gives unspecified currency
             returnDelta = toBeforeSwapDelta(-specifiedAmount.toInt128(), unspecifiedAmount.toInt128());
         } else {
-            // For exact output: user pays unspecified amount, receives specified amount
-            returnDelta = toBeforeSwapDelta(unspecifiedAmount.toInt128(), -specifiedAmount.toInt128());
+            // Hook gives output currency, receives input currency
+            specified.take(poolManager, address(this), specifiedAmount, true);     // Hook gives specified currency
+            unspecified.settle(poolManager, address(this), unspecifiedAmount, true); // Hook receives unspecified currency
+            returnDelta = toBeforeSwapDelta(specifiedAmount.toInt128(), -unspecifiedAmount.toInt128());
         }
-
         return (BaseHook.beforeSwap.selector, returnDelta, dynamicFee);
     }
     
@@ -352,8 +351,9 @@ contract RebasingParityPool is BaseHook, SafeCallback {
 
     /// @notice Get current pool state with calculated ratio
     function _getPoolState(PoolKey calldata key) internal view returns (PoolState memory) {
-        uint256 ethBalance = poolManager.balanceOf(address(this), key.currency0.toId());
-        uint256 stethBalance = poolManager.balanceOf(address(this), key.currency1.toId());
+        // Use our manual tracking instead of ERC6909 balances
+        uint256 ethBalance = poolETHBalance;
+        uint256 stethBalance = poolStETHBalance;
         uint256 ratio;
 
         if (ethBalance == 0) {

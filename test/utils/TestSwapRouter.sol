@@ -43,15 +43,25 @@ contract TestSwapRouter {
 
         (SwapParams memory swapParams, bytes memory hookData) = abi.decode(data, (SwapParams, bytes));
 
+        console2.log("=== UNLOCK CALLBACK START ===");
+        console2.log("Swap direction (zeroForOne):", swapParams.params.zeroForOne);
+        console2.log("Amount specified:", swapParams.params.amountSpecified);
+
         // Handle pre-swap settlements
         _settleSwap(swapParams);
 
         // Execute the actual swap through PoolManager
+        console2.log("Executing swap through PoolManager...");
         BalanceDelta delta = poolManager.swap(swapParams.key, swapParams.params, hookData);
+
+        console2.log("Swap delta received:");
+        console2.log("  delta.amount0():", int256(delta.amount0()));
+        console2.log("  delta.amount1():", int256(delta.amount1()));
 
         // Handle post-swap takes
         _takeSwap(swapParams, delta);
 
+        console2.log("=== UNLOCK CALLBACK END ===");
         return abi.encode(delta);
     }
 
@@ -64,60 +74,52 @@ contract TestSwapRouter {
 
     /// @notice Handle token takes after swap
     function _takeSwap(SwapParams memory swapParams, BalanceDelta delta) internal {
-        // Get the delta amounts for input and output currencies
-        int128 inputDelta = swapParams.params.zeroForOne ? delta.amount0() : delta.amount1();
-        int128 outputDelta = swapParams.params.zeroForOne ? delta.amount1() : delta.amount0();
-
-        console2.log("Debug: zeroForOne =", swapParams.params.zeroForOne);
-        console2.log("Debug: delta.amount0() =", int256(delta.amount0()));
-        console2.log("Debug: delta.amount1() =", int256(delta.amount1()));
-        console2.log("Debug: inputDelta =", int256(inputDelta));
-        console2.log("Debug: outputDelta =", int256(outputDelta));
-
-        // Handle settlement and taking based on delta signs
-        // If delta is negative, PoolManager owes tokens - we take them
-        // If delta is positive, we owe tokens to PoolManager - we settle them
+        console2.log("=== SETTLEMENT START ===");
+        console2.log("Contract ETH balance:", address(this).balance);
 
         // Handle currency0 (ETH)
         if (delta.amount0() > 0) {
-            // We owe ETH to PoolManager
+            // User owes ETH to PoolManager
             uint256 amount = uint256(uint128(delta.amount0()));
-            console2.log("Settling ETH:", amount);
-            poolManager.settle{value: amount}();
-            console2.log("ETH settlement completed");
+            console2.log("User owes ETH to PoolManager:", amount);
+            console2.log("Settling ETH with balance:", address(this).balance);
+            poolManager.settle{value: address(this).balance}();
+            console2.log("ETH settlement complete");
         } else if (delta.amount0() < 0) {
-            // PoolManager owes ETH to us
+            // PoolManager owes ETH to user
             uint256 amount = uint256(uint128(-delta.amount0()));
-            console2.log("Taking ETH:", amount);
+            console2.log("PoolManager owes ETH to user:", amount);
             poolManager.take(swapParams.key.currency0, swapParams.sender, amount);
-            console2.log("ETH take completed");
+            console2.log("ETH take complete");
         } else {
             console2.log("ETH delta is zero");
         }
 
         // Handle currency1 (stETH)
         if (delta.amount1() > 0) {
-            // We owe stETH to PoolManager
+            // User owes stETH to PoolManager
             uint256 amount = uint256(uint128(delta.amount1()));
-            console2.log("Settling stETH:", amount);
+            console2.log("User owes stETH to PoolManager:", amount);
             IERC20(Currency.unwrap(swapParams.key.currency1)).transferFrom(
                 swapParams.sender,
                 address(poolManager),
                 amount
             );
             poolManager.settle();
-            console2.log("stETH settlement completed");
+            console2.log("stETH settlement complete");
         } else if (delta.amount1() < 0) {
-            // PoolManager owes stETH to us
+            // PoolManager owes stETH to user
             uint256 amount = uint256(uint128(-delta.amount1()));
-            console2.log("Taking stETH:", amount);
+            console2.log("PoolManager owes stETH to user:", amount);
             poolManager.take(swapParams.key.currency1, swapParams.sender, amount);
-            console2.log("stETH take completed");
+            console2.log("stETH take complete");
         } else {
             console2.log("stETH delta is zero");
         }
 
-        console2.log("All settlement operations completed");
+        console2.log("=== SETTLEMENT END ===");
+        console2.log("Final contract ETH balance:", address(this).balance);
+        console2.log("Final contract stETH balance:", IERC20(Currency.unwrap(swapParams.key.currency1)).balanceOf(address(this)));
     }
 
     /// @notice Allow contract to receive ETH
