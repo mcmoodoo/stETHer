@@ -221,14 +221,29 @@ contract RebasingParityPool is BaseHook, SafeCallback {
         }
 
         // Execute token transfers through PoolManager
+        // The hook's internal pool receives input currency and gives output currency
+        // Mint input currency to hook (PoolManager accounting: hook gains input)
         poolManager.mint(address(this), inputCurrency.toId(), inputAmount);
+        // Burn output currency from hook (PoolManager accounting: hook loses output)
         poolManager.burn(address(this), outputCurrency.toId(), outputAmount);
 
-        // Calculate and return delta
-        int128 inputDelta = inputAmount.toInt128();
-        int128 outputDelta = outputAmount.toInt128();
-        BeforeSwapDelta returnDelta =
-            isExactInput ? toBeforeSwapDelta(inputDelta, -outputDelta) : toBeforeSwapDelta(-outputDelta, inputDelta);
+        // Calculate and return delta following the same pattern as BaseCustomCurve
+        BeforeSwapDelta returnDelta;
+
+        // Determine which currency is specified and which is unspecified
+        (Currency specified, Currency unspecified) =
+            (params.zeroForOne == isExactInput) ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
+
+        uint256 specifiedAmount = isExactInput ? inputAmount : outputAmount;
+        uint256 unspecifiedAmount = isExactInput ? outputAmount : inputAmount;
+
+        if (isExactInput) {
+            // For exact input: user pays specified amount, receives unspecified amount
+            returnDelta = toBeforeSwapDelta(-specifiedAmount.toInt128(), unspecifiedAmount.toInt128());
+        } else {
+            // For exact output: user pays unspecified amount, receives specified amount
+            returnDelta = toBeforeSwapDelta(unspecifiedAmount.toInt128(), -specifiedAmount.toInt128());
+        }
 
         return (BaseHook.beforeSwap.selector, returnDelta, dynamicFee);
     }
