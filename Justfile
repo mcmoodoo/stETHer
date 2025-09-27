@@ -122,29 +122,22 @@ swap-eth-to-steth AMOUNT="0.01":
         --rpc-url http://localhost:8545 \
         --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
-# Swap stETH for ETH via Universal Router
-swap-steth-to-eth AMOUNT="0.01":
-    #!/bin/bash
-    STETH_ADDRESS=$(jq -r '.contracts.StETH' ui/src/deployments/deployments-localhost.json)
-    HOOKS=$(jq -r '.contracts.RebasingParityPool' ui/src/deployments/deployments-localhost.json)
-    AMOUNT_WEI=$(cast --to-wei {{AMOUNT}} eth)
-
-    # First mint and approve stETH
-    cast send $STETH_ADDRESS "mint(address,uint256)" 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 $AMOUNT_WEI --rpc-url http://localhost:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-    cast send $STETH_ADDRESS "approve(address,uint256)" 0xef740bf23acae26f6492b10de645d6b98dc8eaf3 $AMOUNT_WEI --rpc-url http://localhost:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-
-    # V4_SWAP command (0x00) with pool key and swap params
-    POOL_KEY="(0x0000000000000000000000000000000000000000,$STETH_ADDRESS,3000,60,$HOOKS)"
-    SWAP_PARAMS="(false,$AMOUNT_WEI,0,0x)"
-    SWAP_DATA=$(cast abi-encode 'f((address,address,uint24,int24,address),(bool,int256,uint160,bytes))' "$POOL_KEY" "$SWAP_PARAMS")
-
-    cast send 0xef740bf23acae26f6492b10de645d6b98dc8eaf3 "execute(bytes,bytes[])" "0x00" "[$SWAP_DATA]" \
-        --rpc-url http://localhost:8545 \
-        --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-
 # Run frontend
 dev:
     cd ui && bun run dev
+
+# Run tests with coverage report for src/ directory
+coverage:
+    forge coverage --report summary --report lcov --match-path "src/*" --ir-minimum
+    @echo ""
+    @echo "📊 Coverage report generated!"
+    @echo "📝 View detailed HTML report by running: genhtml lcov.info --output-directory coverage && open coverage/index.html"
+
+# Run tests with coverage and generate HTML report
+coverage-html:
+    forge coverage --report lcov --match-path "src/*" --ir-minimum
+    genhtml lcov.info --output-directory coverage
+    @echo "📊 HTML coverage report generated in coverage/ directory"
 
 # create a control flow graph with surya
 generate-control-flow:
