@@ -329,4 +329,42 @@ contract RebasingParityPoolLiquidityTest is RebasingParityPoolTest {
 
         vm.stopPrank();
     }
+
+    function test_lpToken_onlyHook_canMintBurn() public {
+        // Test that only the hook contract can mint and burn LP tokens
+        ParityLP lpToken = ParityLP(address(rebasingParityPool.LP_TOKEN()));
+
+        // Try to mint directly as Alice (should fail)
+        vm.startPrank(alice);
+        vm.expectRevert("Only hook can mint/burn");
+        lpToken.mint(alice, 100 ether);
+
+        // Try to burn directly as Alice (should fail)
+        vm.expectRevert("Only hook can mint/burn");
+        lpToken.burn(alice, 10 ether);
+        vm.stopPrank();
+
+        // Try to mint as the owner (should still fail)
+        vm.startPrank(owner);
+        vm.expectRevert("Only hook can mint/burn");
+        lpToken.mint(alice, 100 ether);
+        vm.stopPrank();
+
+        // Verify the hook CAN mint (by adding liquidity)
+        vm.startPrank(alice);
+        stETH.approve(address(rebasingParityPool), 5 ether);
+        uint256 lpTokensReceived = rebasingParityPool.addLiquidity{value: 5 ether}(key, 5 ether);
+        assertGt(lpTokensReceived, 0, "Hook should successfully mint LP tokens");
+        assertEq(lpToken.balanceOf(alice), lpTokensReceived, "Alice should have the minted tokens");
+
+        // Verify the hook CAN burn (by removing liquidity)
+        rebasingParityPool.removeLiquidity(key, lpTokensReceived);
+        assertEq(lpToken.balanceOf(alice), 0, "Hook should successfully burn LP tokens");
+        vm.stopPrank();
+
+        console2.log("LP token access control verified:");
+        console2.log("  Direct mint/burn attempts: Correctly rejected");
+        console2.log("  Hook mint via addLiquidity: Success");
+        console2.log("  Hook burn via removeLiquidity: Success");
+    }
 }
