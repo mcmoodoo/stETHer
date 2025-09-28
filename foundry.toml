@@ -3,7 +3,7 @@ src = "src"
 out = "out"
 libs = ["lib"]
 ffi = true
-fs_permissions = [{ access = "read-write", path = ".forge-snapshots/"}, { access = "read-write", path = "ui/src/deployments/"}]
+fs_permissions = [{ access = "read-write", path = ".forge-snapshots/"}, { access = "read-write", path = "ui/src/deployments/"}, { access = "read", path = "./"}]
 solc_version = "0.8.26"
 evm_version = "cancun"
 via_ir = true

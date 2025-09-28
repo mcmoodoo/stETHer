@@ -404,18 +404,6 @@ export const rebasingParityPoolAbi = [
         type: 'address',
       },
       { name: 'treasury', internalType: 'address', type: 'address' },
-      {
-        name: 'allowedPoolKey',
-        internalType: 'struct PoolKey',
-        type: 'tuple',
-        components: [
-          { name: 'currency0', internalType: 'Currency', type: 'address' },
-          { name: 'currency1', internalType: 'Currency', type: 'address' },
-          { name: 'fee', internalType: 'uint24', type: 'uint24' },
-          { name: 'tickSpacing', internalType: 'int24', type: 'int24' },
-          { name: 'hooks', internalType: 'contract IHooks', type: 'address' },
-        ],
-      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -1030,6 +1018,11 @@ export const rebasingParityPoolAbi = [
   { type: 'error', inputs: [], name: 'HookNotCalledByPoolManager' },
   { type: 'error', inputs: [], name: 'HookNotImplemented' },
   { type: 'error', inputs: [], name: 'NotPoolManager' },
+  {
+    type: 'error',
+    inputs: [{ name: 'token', internalType: 'address', type: 'address' }],
+    name: 'SafeERC20FailedOperation',
+  },
 ] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
