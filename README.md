@@ -157,10 +157,6 @@ Dynamic fees apply to stETH → ETH swaps based on pool balance ratios:
 - Ratio 1.5-2:1: 2.0% (20,000 basis points)
 - Ratio > 2:1: 5.0% (50,000 basis points)
 
-### Rebasing Mechanism
-
-The implementation handles rebasing tokens through shares-based accounting. The stETH contract generates yield at 500 basis points annually through time-based rebasing calculations.
-
 ### LP Token System
 
 The `ParityLP` ERC20 contract represents liquidity provider shares. LP tokens are minted upon liquidity deposits and burned upon withdrawals. Accumulated fees compound automatically into LP token value.
@@ -185,19 +181,9 @@ The system implements automatic rebalancing through economic incentives:
 
 Incentive rates are capped at 0.1% and activated only when sufficient protocol fees are available. The mechanism operates within collected revenue constraints.
 
-## Technical Features
-
-### Smart Contract Components
+### Smart Contracts
 
 1. **Main Pool Contract** (`RebasingParityPool.sol`): Core pool logic and Uniswap v4 hook integration
 2. **LP Token** (`ParityLP.sol`): ERC20 token for liquidity provider shares
 3. **Protocol Revenue** (`ProtocolRevenue.sol`): Fee collection and protocol treasury management
 4. **Rebasing Token** (`StETH.sol`): Mock stETH with 5% APY for testing
-
-### Key Functions
-
-- `addLiquidity()`: Add liquidity and receive LP tokens
-- `removeLiquidity()`: Burn LP tokens and withdraw assets + accumulated fees
-- `beforeSwap()`: Uniswap v4 hook that implements parity swaps with dynamic fees
-- `claimFees()`: Allow LPs to claim accumulated fees
-- `rebase()`: Update stETH balances based on time-based yield
