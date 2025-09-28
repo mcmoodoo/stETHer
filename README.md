@@ -4,6 +4,14 @@
 
 A custom parity pool that enables direct `1:1 ETH/stETH` swaps with zero slippage, dynamic asymmetric fees, and sustainable incentives.
 
+## Deployed Contracts (Unichain Mainnet)
+
+- StETH: `0x51aE19065794D01886f97A93E7DC5967940f2894`
+- ProtocolRevenue: `0x581E767fFF7136f57D33109BfB6121a01c7bc868`
+- RebasingParityPool: `0x522C190f46256270177F9aC6AF296319f157c888`
+- ParityLP: `0x8D5E57cf10877E42654d6a084b0511F4E94d0e5B`
+- PoolManager: `0x1F98400000000000000000000000000000000004`
+
 ## How It Works
 
 ```mermaid
@@ -193,55 +201,3 @@ Incentive rates are capped at 0.1% and activated only when sufficient protocol f
 - `beforeSwap()`: Uniswap v4 hook that implements parity swaps with dynamic fees
 - `claimFees()`: Allow LPs to claim accumulated fees
 - `rebase()`: Update stETH balances based on time-based yield
-
-### Testing Suite
-
-- **78 Tests Total** across 7 comprehensive test files:
-  - `RebasingParityHookExtended.t.sol`: Core hook functionality (11 tests)
-  - `ProtocolRevenueExtended.t.sol`: Revenue management (28 tests)
-  - `LPTokens.t.sol`: LP token mechanics (6 tests)
-  - `StETHRebasing.t.sol`: Rebasing token behavior (9 tests)
-  - `RebasingParityHookBranchCoverage.t.sol`: Edge cases (9 tests)
-  - `SustainableIncentives.t.sol`: Incentive system (11 tests)
-  - `RebaseYieldDistribution.t.sol`: Yield distribution (4 tests)
-
-## Operational Characteristics
-
-### Exchange Mechanics
-
-The system executes swaps at a fixed 1:1 ratio without price impact. A 10,000 ETH swap receives exactly 10,000 stETH when pool balance permits.
-
-### Liquidity Provider Economics
-
-Liquidity providers experience:
-
-- No impermanent loss due to correlated asset pricing
-- Fee earnings distributed across entire liquidity position
-- Preservation of underlying stETH yield through shares-based accounting
-- Automatic fee compounding into LP token value
-
-### Automated Rebalancing
-
-Pool balance maintenance operates through economic mechanisms:
-
-- Imbalance-triggered fee increases
-- Fee-funded rebalancing incentives
-- Self-contained operation within revenue constraints
-
-### Trade Execution
-
-The implementation provides deterministic execution for large transactions through fixed exchange ratios. Mathematical operations use integer arithmetic with defined precision constants.
-
-## Applications
-
-### ETH/stETH Trading
-
-- Token exchanges without price impact
-- Large volume swaps with deterministic execution
-- Arbitrage operations between different platforms
-- Liquidity provision with yield preservation
-
-## Test Coverage
-
-**Test suite:** 78 tests across 7 files
-**Code coverage:** 2,040+ lines including unit tests, integration tests, rebasing mechanics, fee distribution, and edge cases

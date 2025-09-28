@@ -70,9 +70,8 @@ contract DeployAllScript is Script {
         console.log("Attempting pool initialization with flexible hook validation...");
         _initializePool();
 
-        // 8. Add initial liquidity
-        console.log("Attempting to add initial liquidity...");
-        _addInitialLiquidity();
+        // 8. Skip initial liquidity (can be added later with separate script)
+        console.log("Skipping initial liquidity - can be added later with 'just add-liquidity-unichain'");
 
         // 9. Save deployment addresses to JSON
         _saveDeploymentAddresses();
@@ -255,6 +254,8 @@ contract DeployAllScript is Script {
         }
     }
 
+    // Not used in deployment - liquidity can be added separately with AddLiquidity.s.sol
+    /*
     function _addInitialLiquidity() internal {
         console.log("Adding initial liquidity...");
 
@@ -293,6 +294,7 @@ contract DeployAllScript is Script {
             console.log("Adding liquidity failed with unknown error");
         }
     }
+    */
 
     function _saveDeploymentAddresses() internal {
         console.log("=== Deployment Addresses ===");
