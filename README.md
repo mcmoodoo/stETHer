@@ -6,7 +6,7 @@ A custom parity pool that enables direct `1:1 ETH/stETH` swaps with zero slippag
 
 ## Deployed Contracts (Unichain Mainnet)
 
-- StETH: `0x51aE19065794D01886f97A93E7DC5967940f2894`
+- StETH (mocked for 5% constant yield): `0x51aE19065794D01886f97A93E7DC5967940f2894`
 - ProtocolRevenue: `0x581E767fFF7136f57D33109BfB6121a01c7bc868`
 - RebasingParityPool: `0x522C190f46256270177F9aC6AF296319f157c888`
 - ParityLP: `0x8D5E57cf10877E42654d6a084b0511F4E94d0e5B`
